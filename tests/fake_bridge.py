@@ -54,6 +54,94 @@ _EXEC_VERBS = {
     "disable", "configure", "terminal",
 }
 
+#: Canned answers for the snippets the server generates for its host/topology
+#: tools. ``fake_bridge.py`` has no JavaScript engine, so it recognises the
+#: ``/* pt-mcp: <tool> */`` marker at the top of each snippet and answers with
+#: plausible data; the real bridge evaluates the script instead. Anything
+#: without a marker (i.e. ``pt_raw``) is echoed back as text.
+_EVAL_CANNED = {
+    "/* pt-mcp: pt_get_config */": [
+        {
+            "name": "FastEthernet0",
+            "ip": "192.168.10.10",
+            "mask": "255.255.255.0",
+            "dhcp": False,
+            "ipv6": [],
+            "up": True,
+        }
+    ],
+    "/* pt-mcp: pt_set_ip */": {
+        "port": "FastEthernet0",
+        "ip": "192.168.10.10",
+        "mask": "255.255.255.0",
+        "dhcp": False,
+    },
+    "/* pt-mcp: pt_set_ipv6 */": {
+        "port": "FastEthernet0",
+        "address": "2001:db8::10",
+        "prefix": 64,
+        "gateway": "2001:db8::1",
+        "ipv6": ["2001:db8::10/64"],
+    },
+    "/* pt-mcp: pt_dns_record */": {
+        "name": "www.g4.lab",
+        "ip": "192.168.20.10",
+        "zone": "g4.lab",
+        "ns": "Server-DNS",
+        "mailbox": "admin.g4.lab",
+        "enabled": True,
+        "soa": True,
+        "ns_record": True,
+        "ip_entry": True,
+        "a_record": True,
+        "entries": 1,
+    },
+    "/* pt-mcp: pt_dns_list */": {"count": 1, "entries": ["www.g4.lab 192.168.20.10"]},
+    "/* pt-mcp: pt_http_page */": {
+        "path": "index.html",
+        "enabled": True,
+        "page": "<h1>pt-mcp fake server</h1>",
+    },
+    "/* pt-mcp: pt_list_links */": [
+        {
+            "a": "R1",
+            "a_port": "GigabitEthernet0/0",
+            "b": "SW1",
+            "b_port": "GigabitEthernet0/1",
+            "cable": "8100",
+            "up": True,
+        }
+    ],
+    "/* pt-mcp: pt_list_ports */": [
+        {
+            "name": "FastEthernet0",
+            "up": True,
+            "protocol_up": True,
+            "ip": "192.168.10.10",
+            "mask": "255.255.255.0",
+            "link": "SW1 FastEthernet0/1",
+        }
+    ],
+    "/* pt-mcp: pt_pc_command len */": 0,
+    "/* pt-mcp: pt_pc_command output */": (
+        "Pinging 192.168.10.1 with 32 bytes of data:\n\n"
+        "Reply from 192.168.10.1: bytes=32 time=1ms TTL=128\n"
+        "Reply from 192.168.10.1: bytes=32 time=1ms TTL=128\n"
+        "Reply from 192.168.10.1: bytes=32 time=2ms TTL=128\n"
+        "Reply from 192.168.10.1: bytes=32 time=1ms TTL=128\n\n"
+        "Ping statistics for 192.168.10.1:\n"
+        "    Packets: Sent = 4, Received = 4, Lost = 0 (0% loss),\n"
+    ),
+}
+
+
+def _eval_canned(js: str):
+    """Answer a server-generated snippet, or echo it back (``pt_raw``)."""
+    for marker, payload in _EVAL_CANNED.items():
+        if marker in js:
+            return {"value": json.dumps(payload, ensure_ascii=False)}
+    return {"value": f"[fake eval] {js}"}
+
 
 def _resolve_type(value):
     if isinstance(value, int):
@@ -287,7 +375,7 @@ def handle(op: str, args: dict):
         return {"saved": True, "path": args.get("path")}
 
     if op == "eval":
-        return {"value": f"[fake eval] {args.get('js', '')}"}
+        return _eval_canned(str(args.get("js", "")))
 
     raise ValueError(f"unknown op: {op}")
 

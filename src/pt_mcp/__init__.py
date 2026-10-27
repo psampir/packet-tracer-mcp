@@ -13,7 +13,7 @@ Modules:
 * :mod:`pt_mcp.config` — paths (``PT_MCP_HOME``), timeout and the saved/ dir.
 * :mod:`pt_mcp.protocol` — the transport: :func:`call_pt`, :class:`PTBridgeError`.
 * :mod:`pt_mcp.commands` — :func:`normalize_commands` for ``pt_configure``.
-* :mod:`pt_mcp.server` — the eleven MCP tools and the stdio entry point.
+* :mod:`pt_mcp.server` — the twenty-two MCP tools and the stdio entry point.
 """
 
 from __future__ import annotations
