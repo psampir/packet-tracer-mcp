@@ -32,7 +32,7 @@ the lab you want to drive in front.
 
 | Field | Value |
 |---|---|
-| **ID** | `com.pawel.ptmcp` |
+| **ID** | `com.psampir.ptmcp` |
 | **Name** | `pt-mcp` |
 | **Startup** | **On Startup** — so the bridge comes up with PT, no clicking later |
 
@@ -61,7 +61,7 @@ makes the matching op fail with a privilege/access-denied error:
 ## 3. Save and start
 
 1. Click **Save** / **OK** to close *Configure PT Script Modules…*.
-2. Select `com.pawel.ptmcp` in the module list and click **Start**.
+2. Select `com.psampir.ptmcp` in the module list and click **Start**.
    If it was already started before you pasted the script, click **Stop** and
    then **Start** (or use **Run File** once) so the new script is evaluated.
 3. Verify: PT's script log shows
@@ -118,7 +118,7 @@ Fix, in this order:
 
 ## 7. Uninstalling
 
-1. *Configure PT Script Modules…* → select `com.pawel.ptmcp` → **Stop**, then
+1. *Configure PT Script Modules…* → select `com.psampir.ptmcp` → **Stop**, then
    **Delete**.
 2. Optionally remove the runtime directory: `rm -rf ~/.local/share/pt-mcp`.
    Nothing else on the system was touched — no service, no firewall rule, no

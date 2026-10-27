@@ -97,7 +97,7 @@ and needs no credential — only the PT privileges you granted the module (see
 | **`pt_mcp.server`** | `src/pt_mcp/server.py` | Eleven MCP tools over stdio; normalizes input, renders every failure as `{"ok": false, "error": …}`. |
 | **Transport** | `src/pt_mcp/protocol.py`, `src/pt_mcp/config.py` | Atomic job write, 50 ms polling, stale-id detection, cleanup on success and on timeout. |
 | **Mailbox** | `$PT_MCP_HOME/{jobs,results,saved}` | The only shared state. Defaults to `~/.local/share/pt-mcp`. |
-| **`bridge/bridge.js`** | inside Packet Tracer (Script Module `com.pawel.ptmcp`) | File watcher + job dedupe + op dispatch; the only code that touches the PT API. |
+| **`bridge/bridge.js`** | inside Packet Tracer (Script Module `com.psampir.ptmcp`) | File watcher + job dedupe + op dispatch; the only code that touches the PT API. |
 | **PT API** | `ipc.network()`, `ipc.appWindow().getActiveWorkspace().getLogicalWorkspace()`, `CiscoDevice`/`ConsoleLine` | The actual capability: devices, links, console input, save, version. |
 | **The `.pkt`** | Packet Tracer's active window | The lab being configured. The bridge only ever sees the active one. |
 
@@ -286,7 +286,7 @@ it is ordered by how often each one is the answer.
 |---|---|---|
 | Timeout; checklist in the error | **PT closed** or crashed | Start Packet Tracer; the module starts with it (*Startup: On Startup*). |
 | Timeout, `pt_status` included | **No `.pkt` open/active** | Open the lab. A device in another window is invisible to the bridge. |
-| Timeout, but `jobs/` fills up | **Script Module stopped** | *Extensions → Scripting → Configure PT Script Modules…* → `com.pawel.ptmcp` → **Start** (Stop → Start after editing `bridge.js`). |
+| Timeout, but `jobs/` fills up | **Script Module stopped** | *Extensions → Scripting → Configure PT Script Modules…* → `com.psampir.ptmcp` → **Start** (Stop → Start after editing `bridge.js`). |
 | Timeout, and job files are never consumed | **Watcher silent** (FUSE/AppImage/network home) | Click **Run File** to force a rescan, call `ptmcp_rescan()`, or restart the module. Also verify the `PT_MCP_HOME` constant in `bridge.js` matches the server's `$PT_MCP_HOME`. |
 | `access denied` / privilege error in PT's log | **Privilege missing** | Enable *Application* + *File Operations* + *Get*/*Change Network Info* on the module, then Stop → Start. |
 | Error that the base dir does not exist | Bridge **never ran** | Start the module once (it creates `jobs/`, `results/`, `saved/`), or `mkdir -p` them. |

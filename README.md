@@ -67,7 +67,7 @@ Do this once per PT install; afterwards the module starts with PT automatically.
 
 1. Packet Tracer 9.0.1 running, with a `.pkt` open (the bridge only sees the **active** file).
 2. **Extensions → Scripting → Configure PT Script Modules… → Add**
-   - **General:** ID `com.pawel.ptmcp`, Name `pt-mcp`, Startup **On Startup**
+   - **General:** ID `com.psampir.ptmcp`, Name `pt-mcp`, Startup **On Startup**
    - **Script Engine:** add a file `bridge.js`, paste the whole of
      [`bridge/bridge.js`](bridge/bridge.js), **Apply**
    - **Security Privileges:** **Application**, **File Operations**, **Get Network Info**,
@@ -129,7 +129,7 @@ A typical session: `pt_status` → `pt_add_device` × n → `pt_link` → `pt_co
 
 | Symptom | Cause / fix |
 |---|---|
-| `Timed out … Packet Tracer is not responding` | PT not running, no `.pkt` open, or the Script Module stopped. Open a lab, then **Extensions → Scripting → Configure PT Script Modules… → `com.pawel.ptmcp` → Start**. |
+| `Timed out … Packet Tracer is not responding` | PT not running, no `.pkt` open, or the Script Module stopped. Open a lab, then **Extensions → Scripting → Configure PT Script Modules… → `com.psampir.ptmcp` → Start**. |
 | `bridge was never set up: base dir … does not exist` | The module has never run, so `~/.local/share/pt-mcp` was never created. Start it once (or click **Run File**). |
 | Jobs appear in `jobs/` but nothing answers | The file watcher isn't firing: click **Run File** in the Scripting interface to force a rescan. Also check the `PT_MCP_HOME` constant at the top of `bridge.js` matches the server's. |
 | Privilege / access-denied errors in PT | Re-open the module's **Security Privileges** tab, enable **Application**, **File Operations** and **Get/Change Network Info**, then Stop → Start. |

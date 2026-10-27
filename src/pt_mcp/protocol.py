@@ -31,7 +31,7 @@ _NOT_RESPONDING = (
     "  1. Cisco Packet Tracer 9.0.1 is running.\n"
     "  2. A .pkt file is open/active (the bridge configures the ACTIVE file).\n"
     "  3. The pt-mcp Script Module is started: Extensions -> Scripting ->\n"
-    "     Configure PT Script Modules... -> select com.pawel.ptmcp -> Start.\n"
+    "     Configure PT Script Modules... -> select com.psampir.ptmcp -> Start.\n"
     "  4. If the file watcher is not firing, click 'Run File' in the\n"
     "     Scripting Interface to force a rescan.\n"
     "  5. The module's Security Privileges include Application + File Operations\n"

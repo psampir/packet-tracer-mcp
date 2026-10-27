@@ -38,7 +38,7 @@ from .protocol import _err, not_set_up, run_op
 
 _INSTRUCTIONS = f"""\
 Packet Tracer bridge (pt-mcp {__version__}). Packet Tracer must be running with a
-.pkt file open and the com.pawel.ptmcp Script Module started; every tool acts on
+.pkt file open and the com.psampir.ptmcp Script Module started; every tool acts on
 the ACTIVE file.
 
 Typical flow:
