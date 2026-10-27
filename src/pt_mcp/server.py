@@ -31,6 +31,8 @@ the stream stays clean for the JSON-RPC handshake.
 
 from __future__ import annotations
 
+import contextlib
+import re
 import time
 from datetime import datetime
 from typing import Any
@@ -81,6 +83,13 @@ _READY_MODES = frozenset({"user", "enable", "config", "shell"})
 #: Default readiness budget, in seconds.
 READY_TIMEOUT = 45.0
 
+#: A fresh IOS device may park at the initial-configuration dialog instead of a
+#: prompt. ``no`` drops it to the normal console; the regex identifies the wait.
+_SETUP_DIALOG_RE = re.compile(
+    r"(initial configuration dialog|would you like to enter|\[yes/no\])",
+    re.IGNORECASE,
+)
+
 
 def wait_ready(device: str, timeout: float = READY_TIMEOUT) -> dict[str, Any]:
     """Block until ``device`` shows a usable prompt, or raise :class:`PTBridgeError`.
@@ -94,9 +103,34 @@ def wait_ready(device: str, timeout: float = READY_TIMEOUT) -> dict[str, Any]:
     """
     deadline = time.monotonic() + max(timeout, 0.0)
     state: dict[str, Any] = {}
+    answered_setup = False
 
     while True:
         state = call_pt("get_state", {"device": device})
+
+        if _SETUP_DIALOG_RE.search(str(state.get("prompt") or "")):
+            # A freshly added IOS device can sit at the initial-configuration
+            # dialog; answer "no" once to reach the normal prompt. If it does
+            # not take, the deadline below reports the dialog specifically.
+            if not answered_setup:
+                # Keep polling even if the answer fails: the deadline is
+                # authoritative and its error names the dialog.
+                with contextlib.suppress(PTBridgeError):
+                    call_pt(
+                        "exec",
+                        {"device": device, "command": "no", "timeout_ms": 5000},
+                    )
+                answered_setup = True
+            if time.monotonic() >= deadline:
+                raise PTBridgeError(
+                    f"device '{device}' is stuck at the IOS initial-configuration "
+                    f"dialog after answering 'no' (prompt={state.get('prompt')!r}).\n"
+                    "Click 'Skip boot' in the device's config dialog, or "
+                    "power-cycle it with pt_power(on=True, ready=True)."
+                )
+            time.sleep(READY_POLL_INTERVAL)
+            continue
+
         if not state.get("booting") and state.get("mode") in _READY_MODES:
             return state
         if time.monotonic() >= deadline:

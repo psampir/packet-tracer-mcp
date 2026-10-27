@@ -45,9 +45,13 @@ class FakeBridge:
     def __init__(self, states: list[dict]) -> None:
         self.states = list(states)
         self.ops: list[tuple[str, dict]] = []
+        self.execs: list[str] = []
 
     def __call__(self, op: str, args: dict | None = None, timeout: float | None = None):
         self.ops.append((op, args or {}))
+        if op == "exec":
+            self.execs.append(str((args or {}).get("command")))
+            return {"ok": True, "prompt": "R1>", "lines": []}
         if op != "get_state":
             raise AssertionError(f"unexpected op in readiness test: {op}")
         if len(self.states) > 1:
@@ -61,6 +65,15 @@ def booting(prompt: str = "") -> dict:
 
 def ready(prompt: str = "R1#", mode: str = "enable") -> dict:
     return {"prompt": prompt, "mode": mode, "booting": False}
+
+
+def setup_dialog() -> dict:
+    """The IOS initial-configuration dialog a fresh router can park at."""
+    return {
+        "prompt": "Would you like to enter the initial configuration dialog? [yes/no]: ",
+        "mode": "unknown",
+        "booting": False,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -128,6 +141,34 @@ def test_wait_ready_times_out_on_an_unknown_prompt_even_when_not_booting(
 
     with pytest.raises(PTBridgeError, match="mode='unknown'"):
         server.wait_ready("R1", timeout=0.5)
+
+
+def test_wait_ready_answers_the_initial_configuration_dialog(
+    monkeypatch: pytest.MonkeyPatch, clock: FakeClock
+) -> None:
+    """A fresh IOS router waits at ``[yes/no]``; one ``no`` reaches the prompt."""
+    fake = FakeBridge([setup_dialog(), ready("R1>", "user")])
+    monkeypatch.setattr(server, "call_pt", fake)
+
+    state = server.wait_ready("R1", timeout=10.0)
+
+    assert state["mode"] == "user"
+    assert fake.execs == ["no"], "exactly one answer, not a loop of 'no'"
+    assert [op for op, _ in fake.ops] == ["get_state", "exec", "get_state"]
+
+
+def test_wait_ready_reports_a_stuck_setup_dialog(
+    monkeypatch: pytest.MonkeyPatch, clock: FakeClock
+) -> None:
+    """If ``no`` does not take, the error names the dialog and the way out."""
+    monkeypatch.setattr(server, "call_pt", FakeBridge([setup_dialog()]))
+
+    with pytest.raises(PTBridgeError) as excinfo:
+        server.wait_ready("R1", timeout=1.0)
+
+    message = str(excinfo.value)
+    assert "initial-configuration dialog" in message
+    assert "Skip boot" in message
 
 
 # --------------------------------------------------------------------------

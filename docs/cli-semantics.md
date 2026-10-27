@@ -140,6 +140,9 @@ a config push into garbage, so the **server** waits before it types:
 - `wait_ready(device, timeout)` polls `get_state` every **250 ms** (real
   `time.sleep`, outside the bridge) until `booting` is false **and** the prompt
   mode is `user`, `enable`, `config` or `shell`;
+- if the prompt is the IOS **initial-configuration dialog** (`… [yes/no]:`), it
+  is answered **once** with `no` and polling continues; a dialog that stays put
+  is reported as such (click *Skip boot* or power-cycle);
 - `pt_configure` and `pt_show` call it first with `ready_timeout` (default
   45 s); `pt_power(..., ready=True)` does the same after powering a device on;
 - on timeout the tool answers `{"ok": false, "error": "device 'R1' was not ready
