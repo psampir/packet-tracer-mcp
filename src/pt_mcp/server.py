@@ -509,7 +509,7 @@ _DNS_RECORD_JS = string.Template(
         zone: $zone,
         ns: $ns,
         mailbox: $mailbox,
-        enabled: $enabled,
+        enabled: null,
         soa: $soa,
         ns_record: $ns_record,
         ip_entry: null,
@@ -517,6 +517,7 @@ _DNS_RECORD_JS = string.Template(
         entries: null
     };
 $action
+    try { result.enabled = !!dns.isEnabled(); } catch (e8) { result.enabled = $enabled; }
     try { result.entries = dns.getEntryCount(); } catch (e9) { result.entries = null; }
     return result;
 }())"""
@@ -796,7 +797,10 @@ def _dns_record(
     name_lit = _lit(name)
     ip_lit = _lit(ip)
     if enable:
+        # The DNS service is off by default on a Server-PT; records alone are
+        # inert until it is enabled (PT still answers NXDOMAIN/timeouts).
         action = (
+            "    dns.setEnable(true);\n"
             f"    try {{ result.ip_entry = !!dns.addIpAddress({name_lit}, {ip_lit}); }}\n"
             "    catch (e2) { throw new Error(\"addIpAddress failed: \" + String(e2)); }\n"
             "    try { result.a_record = !!dns.addARecordToNameServerDb("
@@ -1113,7 +1117,10 @@ def _raw(js: str, max_chars: int) -> dict[str, Any]:
     a huge result is cut at ``max_chars`` with ``"truncated": true``.
     """
     _validate_process_calls(js)
-    payload = _eval(_RAW_PREFIX + js + _RAW_SUFFIX, None, "pt_raw")
+    # The script is embedded as a *string literal* so eval() receives its source
+    # text. Concatenating it raw would eval the expression's value instead, which
+    # turns a string result into code (`"ok"` -> eval(ok) -> ReferenceError).
+    payload = _eval(_RAW_PREFIX + json.dumps(js) + _RAW_SUFFIX, None, "pt_raw")
 
     if isinstance(payload, dict) and payload.get("ok") is False:
         line = payload.get("line")

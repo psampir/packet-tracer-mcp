@@ -499,6 +499,7 @@ def test_pt_dns_record_writes_both_a_records(fake, jload) -> None:
     js = fake.last_js()
     assert 'addIpAddress("www.g4.lab", "192.168.20.10")' in js
     assert 'addARecordToNameServerDb("www.g4.lab", "192.168.20.10")' in js
+    assert "dns.setEnable(true)" in js, "the DNS service is off by default"
     assert 'getProcess("DnsServer")' in js
 
 
@@ -934,9 +935,18 @@ def test_pt_raw_wraps_the_script_for_error_reporting(fake) -> None:
     server.pt_raw("1+1")
 
     js = fake.last_js()
-    assert "try{var __v=eval(1+1);" in js
+    assert 'try{var __v=eval("1+1");' in js, "the source is a string literal"
     assert "JSON.stringify({ok:true,value:__v})" in js
     assert "line:(e&&e.lineNumber)||null" in js
+
+
+def test_pt_raw_keeps_a_string_result_a_string(fake) -> None:
+    """A string expression must not be re-evaluated as code (`"ok"` -> `ok`)."""
+    fake.eval_answers = [{"ok": True, "value": "ok"}]
+
+    server.pt_raw('"ok"')
+
+    assert 'eval("\\"ok\\"")' in fake.last_js()
 
 
 def test_pt_raw_turns_a_thrown_error_into_a_message(fake, jload) -> None:
