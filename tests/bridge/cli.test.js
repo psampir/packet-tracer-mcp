@@ -283,6 +283,31 @@ test("plan in exec mode enables but never configures", () => {
   assert.equal(plan.effective_mode, "exec");
 });
 
+test("plan in exec mode leaves config before the command", () => {
+  const iso = loadBridge();
+  device(iso, { name: "R1", type: 0, prompt: "R1(config)#" });
+
+  const plan = plain(
+    iso.ctx.dispatch("plan", { device: "R1", lines: ["show ip interface brief"], mode: "exec" }),
+  );
+
+  assert.deepEqual(plan.lines, ["end", "show ip interface brief"]);
+  assert.equal(plan.effective_mode, "exec");
+});
+
+test("exec from config ends config then runs the command", () => {
+  const iso = loadBridge();
+  const r1 = device(iso, { name: "R1", type: 0, prompt: "R1(config)#" });
+
+  const result = plain(
+    iso.ctx.dispatch("exec", { device: "R1", command: "show ip interface brief" }),
+  );
+
+  assert.deepEqual(r1.commands, ["end", "show ip interface brief"]);
+  assert.equal(result.prompt, "R1#");
+  assert.equal(result.ok, true);
+});
+
 test("plan in config mode from user exec inserts both wrappers", () => {
   const iso = loadBridge();
   device(iso, { name: "R1", type: 0, prompt: "R1>" });

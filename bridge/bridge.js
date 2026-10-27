@@ -542,10 +542,16 @@ function wrapConfig(currentMode, lines, keepSession) {
     return out;
 }
 
-/* exec: enable (only from user exec); never enter config, never append end. */
+/* exec: leave config first (end), enable from user exec; never enter config. */
 function wrapExec(currentMode, lines) {
     var out = [];
-    if (currentMode === "user") { out.push("enable"); }
+    if (currentMode === "config") {
+        /* A failed/keep_session configure can leave the console in config;
+         * `show` is rejected there, so step back to enable first. */
+        out.push("end");
+    } else if (currentMode === "user") {
+        out.push("enable");
+    }
     return out.concat(lines);
 }
 
