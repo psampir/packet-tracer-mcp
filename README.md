@@ -59,7 +59,9 @@ escape hatch, not a daily tool.
 
 Read [docs/architecture.md](docs/architecture.md) for the flowcharts, the `pt_configure` sequence,
 execution semantics, the security/privileges model and a failure-mode table. The wire format is in
-[docs/protocol.md](docs/protocol.md); the one-time PT-side setup in [docs/setup.md](docs/setup.md).
+[docs/protocol.md](docs/protocol.md); the one-time PT-side setup in [docs/setup.md](docs/setup.md);
+the CLI/mode rules, readiness and dry-run semantics in
+[docs/cli-semantics.md](docs/cli-semantics.md).
 
 ## One-time Packet Tracer setup
 
@@ -112,18 +114,20 @@ Eleven tools, all returning JSON strings. Failures never raise into the client: 
 |---|---|---|
 | `pt_status` | — | Bridge health: PT version + device count of the active file |
 | `pt_list_devices` | — | Every device (name, type, typeName, model) and the link count |
-| `pt_add_device` | `name, type, model, x=100, y=100` | Add a device; `type` is a `DeviceType` name (`eRouter`) or int, `name=""` keeps PT's auto name |
+| `pt_add_device` | `name, type, model, x=100, y=100` | Add a device; `type` is a `DeviceType` name (`eRouter`) or int, `name=""` keeps PT's auto name. Returns `ready` (false while it boots) |
 | `pt_remove_device` | `name` | Remove a device |
-| `pt_link` | `dev_a, port_a, dev_b, port_b, cable="eCopperGigabitEthernet"` | Cable two ports; friendly cable names (`copper`, `crossover`, `fiber`, `serial`, `console`, …) are mapped to `CONNECT_TYPES` |
-| `pt_autolink` | `dev_a, dev_b` | Connect two devices, letting PT choose cable and ports |
-| `pt_configure` | `device, commands` | Send IOS CLI (string or list); blanks/`!` dropped, `enable` + `configure terminal` prepended, `end` appended when missing |
-| `pt_show` | `device, command` | Run one show/exec command and return the output |
-| `pt_power` | `device, on=True` | Power a device on or off |
+| `pt_link` | `a, a_port, b, b_port, cable="eCopperGigabitEthernet"` | Cable two ports; friendly cable names (`copper`, `crossover`, `fiber`, `serial`, `console`, …) are mapped to `CONNECT_TYPES` |
+| `pt_autolink` | `a, b` | Connect two devices, letting PT choose cable and ports |
+| `pt_configure` | `device, commands, mode="auto", keep_session=False, stop_on_error=True, dry_run=False, ready_timeout=45` | Send IOS CLI (string or list); blanks/`!` dropped, then the **bridge** adds `enable`/`configure terminal`/`end` depending on the prompt (never on a PC). `dry_run=True` returns the lines without sending |
+| `pt_show` | `device, command, ready_timeout=45` | Run one show/exec command and return the output |
+| `pt_power` | `device, on=True, ready=False, ready_timeout=45` | Power a device on or off; `ready=True` waits for the boot to finish |
 | `pt_save` | `path=""` | Save the active `.pkt` (default `~/.local/share/pt-mcp/saved/<ts>.pkt`) |
 | `pt_raw` | `js` | Escape hatch: evaluate JS in the PT engine (`ipc.network().getDeviceCount()`) |
 
 A typical session: `pt_status` → `pt_add_device` × n → `pt_link` → `pt_configure` → `pt_show` →
-`pt_save`.
+`pt_save`. Every `pt_configure`/`pt_show` waits for the device's prompt first (`ready_timeout`), and
+`pt_configure(..., dry_run=True)` previews the exact lines — including the wrappers — before anything
+is typed. Mode rules and the per-line error format: [docs/cli-semantics.md](docs/cli-semantics.md).
 
 ## Troubleshooting
 
@@ -134,7 +138,9 @@ A typical session: `pt_status` → `pt_add_device` × n → `pt_link` → `pt_co
 | Jobs appear in `jobs/` but nothing answers | The file watcher isn't firing: click **Run File** in the Scripting interface to force a rescan. Also check the `PT_MCP_HOME` constant at the top of `bridge.js` matches the server's. |
 | Privilege / access-denied errors in PT | Re-open the module's **Security Privileges** tab, enable **Application**, **File Operations** and **Get/Change Network Info**, then Stop → Start. |
 | `device not found: X` | The name is wrong, or the device lives in a different (non-active) `.pkt` — the bridge only sees the active window. |
-| Commands return empty output | The device is still booting. Wait, power it on with `pt_power`, or retry. |
+| Commands return empty output | The device is still booting. Every `pt_configure`/`pt_show` waits up to `ready_timeout` (45 s) for a prompt: raise it, power the device on with `pt_power(..., ready=True)`, or use the device's "Skip boot" dialog. |
+| `device 'R1' was not ready within 45s` | Still in `--- System Configuration Dialog ---` or booting | Increase `ready_timeout`, power-cycle with `pt_power(on=True, ready=True)`, or answer the setup wizard manually once. |
+| `stopped_on` in a `pt_configure` result | The device rejected that line (`% Invalid input`, …) or never settled | Check `index`/`line`/`prompt`; rerun with `dry_run=True` to see the wrappers the bridge adds, or `mode="raw"` to send the block verbatim. |
 | `pt_link` fails | Port names are case-sensitive (`GigabitEthernet0/0`); try `pt_autolink` to let PT pick compatible ports. |
 | PT was restarted | The module restarts with PT and recreates its directories; just retry the call. |
 
@@ -143,9 +149,9 @@ A typical session: `pt_status` → `pt_add_device` × n → `pt_link` → `pt_co
 ```sh
 cd /home/pawel/Code/Projects/packet-tracer-mcp
 uv sync --extra dev
-uv run pytest                                        # 52 Python tests, all offline
-uv run pytest --cov=pt_mcp --cov-report=term-missing  # same run, 85% coverage gate
-node --test tests/bridge/*.test.js                   # 41 Node tests against the real bridge.js
+uv run pytest                                        # 78 Python tests, all offline
+uv run pytest --cov=pt_mcp --cov-report=term-missing  # same run, 100% line coverage (gate: 85%)
+node --test tests/bridge/*.test.js                   # 72 Node tests against the real bridge.js
 uv run ruff check .                                  # lint
 node --check bridge/bridge.js                        # ES5 bridge must stay parseable
 ```
@@ -153,10 +159,11 @@ node --check bridge/bridge.js                        # ES5 bridge must stay pars
 The Python suite is driven by `tests/fake_bridge.py`, which answers on disk exactly
 like `bridge/bridge.js` does; the Node suite is the other half of the contract —
 `tests/bridge/harness.js` loads the **unmodified** `bridge/bridge.js` into a `node:vm`
-context with a fake `ipc`, mock devices and an in-memory `SystemFileManager`, so
-dispatch, the job/result file dance, the dedupe guard and the watcher path are all
-exercised without Packet Tracer. Only Node built-ins are used (`node:test`,
-`node:assert`, `node:vm`) — there are no npm dependencies to install.
+context with a fake `ipc`, mock devices with an IOS prompt state machine, and an
+in-memory `SystemFileManager`, so dispatch, the job/result file dance, the dedupe guard,
+the watcher path and the CLI mode rules are all exercised without Packet Tracer. Only
+Node built-ins are used (`node:test`, `node:assert`, `node:vm`) — there are no npm
+dependencies to install.
 
 CI ([`ci.yml`](.github/workflows/ci.yml)) runs all three: `ruff check .`, the Node
 suite and `pytest` under an **85% line-coverage gate** on `pt_mcp`
@@ -174,7 +181,7 @@ Layout:
 | `bridge/bridge.js` | the ES5 script that runs **inside** Packet Tracer |
 | `tests/fake_bridge.py` | protocol-compatible stand-in bridge for the Python suite |
 | `tests/bridge/` | Node harness + tests that load the real `bridge.js` into `node:vm` |
-| `docs/` | [architecture](docs/architecture.md), [setup](docs/setup.md), [protocol](docs/protocol.md) |
+| `docs/` | [architecture](docs/architecture.md), [setup](docs/setup.md), [protocol](docs/protocol.md), [cli semantics](docs/cli-semantics.md) |
 
 `bridge/bridge.js` is deliberately frozen ES5 (QtScript: `var`/`function` only, no `let`, arrows,
 template literals or classes). It is copied into PT by hand, so keep changes minimal and re-paste it

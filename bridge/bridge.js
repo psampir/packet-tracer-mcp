@@ -13,6 +13,15 @@
  *   This bridge picks it up, runs the op against the PT IPC API, writes
  *   <HOME>/results/<id>.json, then deletes the job file. No network at all.
  *
+ *   Console work (PTM-01/02/06) is decided HERE, not in Python, because only
+ *   the bridge sees the prompt after every line:
+ *     get_state  prompt / mode / booting / hasIos / type / model
+ *     plan       the exact lines a configure call would send (no sending)
+ *     configure  plan + send, one line at a time, waiting for each prompt
+ *     exec       the same machinery for one exec command ("show" is an alias)
+ *   Mode rules: auto | raw | exec | config, plus keep_session / stop_on_error.
+ *   See docs/cli-semantics.md.
+ *
  * Protocol (must match server.py):
  *   request : {"id":"<id>","op":"<op>","args":{...}}
  *   response: {"id":"<id>","ok":true,"result":<any>}
@@ -336,14 +345,107 @@ function getLogicalWorkspace() {
     return ipc.appWindow().getActiveWorkspace().getLogicalWorkspace();
 }
 
-/* Enter a list of CLI lines on a device and return the resulting output. */
-function enterLines(device, lines) {
+/* ==========================================================================
+ * CLI state, modes and line-by-line console driving
+ * --------------------------------------------------------------------------
+ * Everything that decides *what* to type into a device lives here, because
+ * only the bridge can see the prompt after every line:
+ *
+ *   get_state -- prompt, mode, booting, hasIos, type, model
+ *   plan      -- the exact lines a configure call would send (no sending)
+ *   configure -- plan + send, one line at a time, waiting for each prompt
+ *   exec      -- the same machinery for a single exec command
+ *
+ * The Python side only splits input into non-blank lines; it has no mode
+ * policy at all.
+ * ========================================================================== */
+
+/* Device types that speak IOS (and therefore have enable/config modes). */
+var IOS_DEVICE_TYPES = { 0: true, 1: true, 16: true, 26: true, 39: true };
+
+/* Accepted values of the "mode" argument. */
+var CLI_MODES = { auto: true, raw: true, exec: true, config: true };
+
+/* First word of a line that is an exec-mode command, not a config statement. */
+var EXEC_VERBS = {
+    show: true, ping: true, traceroute: true, telnet: true, ssh: true,
+    clear: true, copy: true, write: true, reload: true, dir: true, more: true,
+    debug: true, undebug: true, clock: true, exit: true, enable: true,
+    disable: true, configure: true, terminal: true
+};
+
+/* Console output that means the line was not accepted. */
+var CLI_ERROR_RE = /(% Invalid input|% Incomplete|% Ambiguous|% Unknown|% Please answer|Translating ")/;
+
+/* Per-line wait: poll, stable-for, hard cap (milliseconds). */
+var SEND_POLL_MS = 15;
+var SEND_STABLE_MS = 120;
+var SEND_TIMEOUT_MS = 3000;
+
+function nowMs() {
+    /* ES5 has Date.now(); the fallback keeps older QtScript builds happy. */
+    if (typeof Date.now === "function") { return Date.now(); }
+    return new Date().getTime();
+}
+
+/* Bounded busy-wait: the Script Engine has no usable timers, and each wait is
+ * only a few milliseconds. Readiness (seconds) is handled by the server. */
+function sleepMs(ms) {
+    var until = nowMs() + ms;
+    while (nowMs() < until) { /* spin */ }
+}
+
+function deviceTypeId(device) {
+    var t = null;
+    try { t = device.getType(); } catch (e) { t = null; }
+    return t;
+}
+
+function deviceHasIos(type) {
+    if (type === null || typeof type === "undefined") { return false; }
+    return IOS_DEVICE_TYPES.hasOwnProperty(type) === true;
+}
+
+/* Classify a prompt: shell (PC C:\>), config, enable, user, unknown. */
+function promptMode(prompt) {
+    var p = String(prompt === null || typeof prompt === "undefined" ? "" : prompt);
+    p = p.replace(/\s+$/, "");
+    if (!p) { return "unknown"; }
+    var last = p.charAt(p.length - 1);
+    if (last === "#") {
+        return p.indexOf("(config") >= 0 ? "config" : "enable";
+    }
+    if (last === ">") {
+        /* A drive-letter prompt is a host shell, not IOS user exec. */
+        if (/^[A-Za-z]:[\\\/]/.test(p)) { return "shell"; }
+        return "user";
+    }
+    return "unknown";
+}
+
+function isReadyMode(mode) {
+    return mode === "user" || mode === "enable" ||
+        mode === "config" || mode === "shell";
+}
+
+function deviceBooting(device, prompt) {
+    try {
+        if (device && typeof device.isBooting === "function") {
+            return !!device.isBooting();
+        }
+    } catch (e) { /* fall back to the prompt heuristic */ }
+    var p = String(prompt === null || typeof prompt === "undefined" ? "" : prompt);
+    if (!p) { return true; }
+    if (p.indexOf("System Configuration Dialog") >= 0) { return true; }
+    if (p.indexOf("Press RETURN") >= 0) { return true; }
+    return false;
+}
+
+/* The console line to drive: ConsoleLine first (it has getOutput()), then
+ * TerminalLine (which has no getOutput()). */
+function getCommandLine(device) {
     var line = null;
     var lineErr = null;
-
-    /* Prefer ConsoleLine: it exposes getOutput() (TerminalLine does not).
-     * Verified in the PT 9.0.1 API docs -- ConsoleLine::enterCommand(string),
-     * getOutput(), getPrompt(), getMode(); TerminalLine has no getOutput(). */
     try { line = device.getConsoleLine(); } catch (e) { lineErr = e; }
     if (!line) {
         try { line = device.getCommandLine(); } catch (e) { lineErr = e; }
@@ -352,42 +454,324 @@ function enterLines(device, lines) {
         throw new Error("no command line available on device" +
             (lineErr ? ": " + errorMessage(lineErr) : ""));
     }
+    return line;
+}
 
-    var i, cmd;
+function readPrompt(line) {
+    var prompt = "";
+    try {
+        if (typeof line.getPrompt === "function") { prompt = line.getPrompt(); }
+    } catch (e) { prompt = ""; }
+    return String(prompt === null || typeof prompt === "undefined" ? "" : prompt);
+}
+
+function readOutput(line) {
+    var output = "";
+    try {
+        if (typeof line.getOutput === "function") { output = line.getOutput(); }
+    } catch (e) { output = ""; }
+    return String(output === null || typeof output === "undefined" ? "" : output);
+}
+
+function readDeviceState(device, line) {
+    var ln = line || null;
+    if (!ln) {
+        try { ln = getCommandLine(device); } catch (e) { ln = null; }
+    }
+    var prompt = ln ? readPrompt(ln) : "";
+    var type = deviceTypeId(device);
+    var model = "";
+    try { model = String(device.getModel()); } catch (e) { model = ""; }
+    return {
+        name: String(device.getName()),
+        prompt: prompt,
+        mode: promptMode(prompt),
+        booting: deviceBooting(device, prompt),
+        hasIos: deviceHasIos(type),
+        type: type,
+        model: model
+    };
+}
+
+function normalizeCliMode(mode) {
+    var m = String(mode === null || typeof mode === "undefined" || mode === "" ? "auto" : mode);
+    m = m.toLowerCase();
+    if (!CLI_MODES.hasOwnProperty(m)) {
+        throw new Error("unknown mode '" + String(mode) +
+            "'; valid: auto, raw, exec, config");
+    }
+    return m;
+}
+
+function firstMeaningfulLine(lines) {
+    var i, s;
     for (i = 0; i < lines.length; i++) {
-        cmd = String(lines[i]);
+        s = String(lines[i] === null || typeof lines[i] === "undefined" ? "" : lines[i]);
+        s = s.replace(/^\s+/, "");
+        if (s) { return s; }
+    }
+    return null;
+}
+
+function lastMeaningfulLine(lines) {
+    var i, s;
+    for (i = lines.length - 1; i >= 0; i--) {
+        s = String(lines[i] === null || typeof lines[i] === "undefined" ? "" : lines[i]);
+        s = s.replace(/\s+$/, "");
+        if (s) { return s; }
+    }
+    return null;
+}
+
+function isExecVerb(line) {
+    var m = /^[A-Za-z][A-Za-z-]*/.exec(String(line));
+    if (!m) { return false; }
+    return EXEC_VERBS.hasOwnProperty(m[0].toLowerCase());
+}
+
+/* config: enable (only from user exec) -> configure terminal -> body -> end. */
+function wrapConfig(currentMode, lines, keepSession) {
+    var out = [];
+    if (currentMode === "user") { out.push("enable"); }
+    if (currentMode !== "config") { out.push("configure terminal"); }
+    out = out.concat(lines);
+    /* No second end if the block already finishes with one. */
+    var last = lastMeaningfulLine(lines);
+    var alreadyEnded = last !== null && last.toLowerCase() === "end";
+    if (!keepSession && !alreadyEnded) { out.push("end"); }
+    return out;
+}
+
+/* exec: enable (only from user exec); never enter config, never append end. */
+function wrapExec(currentMode, lines) {
+    var out = [];
+    if (currentMode === "user") { out.push("enable"); }
+    return out.concat(lines);
+}
+
+/* With the prompt at enable (or user, after enable), decide exec vs config. */
+function planAtEnable(lines, keepSession) {
+    var first = firstMeaningfulLine(lines);
+    if (first !== null && isExecVerb(first)) {
+        return { effective: "exec", lines: lines.slice() };
+    }
+    return {
+        effective: "config",
+        lines: wrapConfig("enable", lines, keepSession)
+    };
+}
+
+/* Resolve the requested mode against the observed prompt. Never sends. */
+function planLines(state, lines, requestedMode, keepSession) {
+    var requested = normalizeCliMode(requestedMode);
+    var input = lines.slice();
+    var atEnable;
+
+    /* No IOS (PC, server, printer, AP, ...) means zero insertions. */
+    if (!state.hasIos) {
+        return { requested: requested, effective: "raw", lines: input };
+    }
+    if (requested === "raw") {
+        return { requested: requested, effective: "raw", lines: input };
+    }
+    if (requested === "exec") {
+        return {
+            requested: requested,
+            effective: "exec",
+            lines: wrapExec(state.mode, input)
+        };
+    }
+    if (requested === "config") {
+        return {
+            requested: requested,
+            effective: "config",
+            lines: wrapConfig(state.mode, input, keepSession)
+        };
+    }
+
+    /* auto */
+    if (state.mode === "config") {
+        return {
+            requested: requested,
+            effective: "config",
+            lines: wrapConfig("config", input, keepSession)
+        };
+    }
+    if (state.mode === "user") {
+        atEnable = planAtEnable(input, keepSession);
+        return {
+            requested: requested,
+            effective: atEnable.effective,
+            lines: ["enable"].concat(atEnable.lines)
+        };
+    }
+    if (state.mode === "enable") {
+        atEnable = planAtEnable(input, keepSession);
+        return {
+            requested: requested,
+            effective: atEnable.effective,
+            lines: atEnable.lines
+        };
+    }
+    /* shell / unknown: never inject anything. */
+    return { requested: requested, effective: "raw", lines: input };
+}
+
+/* Send one line and wait for it to be absorbed: the prompt changed, or the
+ * output buffer stayed the same length for SEND_STABLE_MS. */
+function sendOneLine(device, line, cmd, timeoutMs) {
+    var promptBefore = readPrompt(line);
+    var lenBefore = readOutput(line).length;
+    var lastLen = lenBefore;
+    var started = nowMs();
+    var lastChange = started;
+    var timedOut = false;
+    var promptAfter = promptBefore;
+
+    try {
+        line.enterCommand(cmd);
+    } catch (e) {
+        /* Fallback to CiscoDevice.enterCommand(cmd, mode) */
         try {
-            line.enterCommand(cmd);
-        } catch (e) {
-            /* Fallback to CiscoDevice.enterCommand(cmd, mode) */
-            try {
-                device.enterCommand(cmd, "");
-            } catch (e2) {
-                throw new Error("enterCommand('" + cmd + "') failed: " +
-                    errorMessage(e2));
-            }
+            device.enterCommand(cmd, "");
+        } catch (e2) {
+            throw new Error("enterCommand('" + cmd + "') failed: " +
+                errorMessage(e2));
         }
     }
 
-    /* Give the engine a chance to render output. flush(int) per docs. */
-    try { if (typeof line.flush === "function") { line.flush(500); } }
-    catch (e) { try { line.flush(); } catch (e2) { /* ignore */ } }
+    for (;;) {
+        /* TerminalLine has flush(int); ConsoleLine does not in some builds. */
+        try {
+            if (typeof line.flush === "function") { line.flush(10); }
+        } catch (e3) { /* ignore: flush is a hint, not a requirement */ }
 
-    var output = "";
-    try {
-        if (typeof line.getOutput === "function") {
-            output = line.getOutput();
+        var out = readOutput(line);
+        var now = nowMs();
+        if (out.length !== lastLen) {
+            lastLen = out.length;
+            lastChange = now;
         }
-    } catch (e) { output = ""; }
-
-    var prompt = "";
-    try {
-        if (typeof line.getPrompt === "function") {
-            prompt = line.getPrompt();
+        promptAfter = readPrompt(line);
+        if (promptAfter !== promptBefore) { break; }
+        if (now - lastChange >= SEND_STABLE_MS) { break; }
+        if (now - started >= timeoutMs) {
+            timedOut = true;
+            break;
         }
-    } catch (e) { prompt = ""; }
+        sleepMs(SEND_POLL_MS);
+    }
 
-    return { output: tail(output, 8000), prompt: String(prompt) };
+    var delta = readOutput(line).substring(lenBefore);
+    return {
+        prompt: promptAfter,
+        delta: delta,
+        timedOut: timedOut,
+        ok: !timedOut && !CLI_ERROR_RE.test(delta)
+    };
+}
+
+/* Run a resolved plan line by line and build the configure/exec result. */
+function runLines(device, plan, options, line) {
+    var opts = options || {};
+    var stopOnError = opts.stopOnError !== false;
+    var timeoutMs = typeof opts.timeoutMs === "number"
+        ? opts.timeoutMs
+        : parseInt(opts.timeoutMs, 10);
+    if (isNaN(timeoutMs) || timeoutMs <= 0) { timeoutMs = SEND_TIMEOUT_MS; }
+
+    var console = line || getCommandLine(device);
+    var records = [];
+    var chunks = [];
+    var failed = [];
+    var stoppedOn = null;
+    var i, cmd, sent, failure;
+
+    for (i = 0; i < plan.lines.length; i++) {
+        cmd = String(plan.lines[i]);
+        sent = sendOneLine(device, console, cmd, timeoutMs);
+        records.push({
+            line: cmd,
+            prompt: sent.prompt,
+            output: sent.delta,
+            ok: sent.ok
+        });
+        if (sent.delta) { chunks.push(sent.delta); }
+        if (!sent.ok) {
+            failure = {
+                index: i + 1,
+                line: cmd,
+                prompt: sent.prompt,
+                reason: sent.timedOut ? "timeout" : "rejected",
+                output: sent.delta
+            };
+            if (stoppedOn === null) { stoppedOn = failure; }
+            failed.push(i + 1);
+            if (stopOnError) { break; }
+        }
+    }
+
+    var result = {
+        ok: stoppedOn === null,
+        prompt: readPrompt(console),
+        lines: records,
+        output: chunks.join(""),
+        stopped_on: stoppedOn,
+        mode: plan.requested,
+        effective_mode: plan.effective
+    };
+    if (stoppedOn !== null) {
+        result.error = "line " + stoppedOn.index + " '" + stoppedOn.line + "' " +
+            (stoppedOn.reason === "timeout" ? "timed out" : "was rejected") +
+            " at prompt '" + stoppedOn.prompt + "'";
+        result.failed = failed;
+    }
+    return result;
+}
+
+/* Configure op: resolve the plan, then send it. */
+function configureDevice(device, args) {
+    var lines = args.lines || [];
+    if (!lines.length) { throw new Error("configure: no lines supplied"); }
+    var console = getCommandLine(device);
+    var state = readDeviceState(device, console);
+    var plan = planLines(state, lines, args.mode, !!args.keep_session);
+    return runLines(device, plan, {
+        stopOnError: args.stop_on_error !== false,
+        timeoutMs: args.timeout_ms
+    }, console);
+}
+
+/* Plan op: the same resolution, without touching the console. */
+function planDevice(device, args) {
+    var lines = args.lines || [];
+    if (!lines.length) { throw new Error("plan: no lines supplied"); }
+    var state = readDeviceState(device);
+    var plan = planLines(state, lines, args.mode, !!args.keep_session);
+    return {
+        lines: plan.lines,
+        mode: plan.requested,
+        effective_mode: plan.effective,
+        /* A plan taken while the device boots is provisional: the prompt is
+         * not known yet, so `auto` cannot wrap anything. */
+        prompt: state.prompt,
+        booting: state.booting
+    };
+}
+
+/* Exec op (and the older "show" alias): one command, exec mode, no end. */
+function execDevice(device, command, timeoutMs, opName) {
+    var cmd = String(command === null || typeof command === "undefined" ? "" : command);
+    if (!cmd.replace(/\s+$/, "")) {
+        throw new Error((opName || "exec") + ": no command supplied");
+    }
+    var console = getCommandLine(device);
+    var state = readDeviceState(device, console);
+    var plan = planLines(state, [cmd], "exec", true);
+    return runLines(device, plan, {
+        stopOnError: true,
+        timeoutMs: timeoutMs
+    }, console);
 }
 
 /* --------------------------------------------------------------------------
@@ -443,7 +827,14 @@ function dispatch(op, args) {
             dev.setName(String(args.name));
             newName = String(args.name);
         }
-        return { name: newName };
+        /* Non-blocking readiness flag: a freshly added IOS device is usually
+         * still booting. The server's wait_ready() polls get_state. */
+        var ready = false;
+        try {
+            var newState = readDeviceState(getDeviceOrThrow(newName));
+            ready = !newState.booting && isReadyMode(newState.mode);
+        } catch (eAdd) { ready = false; }
+        return { name: newName, ready: ready };
     }
 
     if (op === "remove_device") {
@@ -466,16 +857,35 @@ function dispatch(op, args) {
         return { ok: true };
     }
 
+    if (op === "get_state") {
+        return readDeviceState(getDeviceOrThrow(args.device));
+    }
+
+    if (op === "plan") {
+        return planDevice(getDeviceOrThrow(args.device), args);
+    }
+
     if (op === "configure") {
-        var cdev = getDeviceOrThrow(args.device);
-        var clines = args.lines || [];
-        if (!clines.length) { throw new Error("configure: no lines supplied"); }
-        return enterLines(cdev, clines);
+        return configureDevice(getDeviceOrThrow(args.device), args);
+    }
+
+    if (op === "exec") {
+        return execDevice(
+            getDeviceOrThrow(args.device),
+            args.command,
+            args.timeout_ms,
+            "exec"
+        );
     }
 
     if (op === "show") {
-        var sdev = getDeviceOrThrow(args.device);
-        return enterLines(sdev, [String(args.command)]);
+        /* Backwards-compatible alias for exec (one command, no config). */
+        return execDevice(
+            getDeviceOrThrow(args.device),
+            args.command,
+            args.timeout_ms,
+            "show"
+        );
     }
 
     if (op === "power") {

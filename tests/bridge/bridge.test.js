@@ -182,7 +182,7 @@ test("add_device without a name keeps PT's auto name", () => {
 
   const result = plain(iso.ctx.dispatch("add_device", { type: "eSwitch", model: "2960" }));
 
-  assert.deepEqual(result, { name: "R-auto" });
+  assert.deepEqual(result, { name: "R-auto", ready: true });
   assert.ok(iso.devices.has("R-auto"));
   assert.equal(iso.devices.get("R-auto").type, 1);
   assert.equal(iso.devices.get("R-auto").getName(), "R-auto");
@@ -195,7 +195,7 @@ test("add_device with a name calls setName and returns the new name", () => {
     iso.ctx.dispatch("add_device", { name: "R1", type: 0, model: "2911", x: 10, y: 20 }),
   );
 
-  assert.deepEqual(result, { name: "R1" });
+  assert.deepEqual(result, { name: "R1", ready: true });
   assert.ok(iso.devices.has("R1"));
   assert.ok(!iso.devices.has("R-auto"), "the auto name is gone after setName");
   assert.equal(iso.devices.get("R1").x, 10);
@@ -261,32 +261,53 @@ test("autolink lets PT pick the ports", () => {
 // --------------------------------------------------------------------------
 // dispatch: CLI
 // --------------------------------------------------------------------------
-test("configure prefers ConsoleLine and returns its output and prompt", () => {
+test("configure prefers ConsoleLine and returns per-line results and the final prompt", () => {
   const iso = loadBridge();
   const device = addMockDevice(iso, { name: "R1", model: "2911", type: 0, prompt: "R1#" });
-  const lines = ["enable", "configure terminal", "hostname R1", "end"];
+  const lines = ["hostname R1", "interface GigabitEthernet0/0", "no shutdown"];
+  const sent = ["configure terminal"].concat(lines, ["end"]);
 
   const result = plain(iso.ctx.dispatch("configure", { device: "R1", lines }));
 
-  assert.deepEqual(device.commands, lines, "every line entered, in order");
+  assert.deepEqual(device.commands, sent, "mode wrappers added, every line entered in order");
   assert.equal(device.consoleLineCalls, 1);
   assert.equal(device.commandLineCalls, 0, "TerminalLine has no getOutput()");
-  assert.deepEqual(result, { output: lines.map((l) => l + "\n").join(""), prompt: "R1#" });
-  assert.equal(device.consoleLine.flushArgs[0], 500, "flush(500) before reading output");
+  assert.equal(result.ok, true);
+  assert.equal(result.prompt, "R1#");
+  assert.equal(result.mode, "auto");
+  assert.equal(result.effective_mode, "config");
+  assert.equal(result.stopped_on, null);
+  assert.deepEqual(
+    result.lines.map((entry) => entry.line),
+    sent,
+  );
+  assert.deepEqual(
+    result.lines.map((entry) => entry.output),
+    sent.map((line) => line + "\n"),
+    "each line reports its own delta",
+  );
+  assert.equal(result.output, sent.map((l) => l + "\n").join(""), "deltas joined");
+  assert.equal(device.consoleLine.flushArgs[0], 10, "flush(10) while waiting per line");
 });
 
 test("configure falls back to TerminalLine (which has no getOutput)", () => {
   const iso = loadBridge();
-  const device = addMockDevice(iso, { name: "SW1", model: "2960", type: 1, consoleLine: false });
+  const device = addMockDevice(iso, {
+    name: "SW1",
+    model: "2960",
+    type: 1,
+    consoleLine: false,
+    terminalPrompt: "SW1#",
+  });
 
-  const result = plain(
-    iso.ctx.dispatch("configure", { device: "SW1", lines: ["enable", "show run"] }),
-  );
+  const result = plain(iso.ctx.dispatch("configure", { device: "SW1", lines: ["show run"] }));
 
   assert.equal(device.consoleLineCalls, 1);
   assert.equal(device.commandLineCalls, 1);
-  assert.deepEqual(device.terminalLine.commands, ["enable", "show run"]);
-  assert.deepEqual(result, { output: "", prompt: ">" });
+  assert.deepEqual(device.terminalLine.commands, ["show run"]);
+  assert.equal(result.output, "", "no getOutput() means no delta");
+  assert.equal(result.prompt, "SW1#");
+  assert.equal(result.effective_mode, "exec", "a show line at enable stays exec");
 });
 
 test("configure reports a device with no command line at all", () => {
@@ -309,7 +330,9 @@ test("configure falls back to device.enterCommand when the line throws", () => {
     { cmd: "enable", mode: "" },
     { cmd: "end", mode: "" },
   ]);
-  assert.deepEqual(result, { output: "", prompt: "R1#" }, "output stays empty, prompt still read");
+  assert.equal(result.output, "", "output stays empty");
+  assert.equal(result.prompt, "R1#", "prompt is still read");
+  assert.equal(result.ok, true);
 });
 
 test("configure rejects an empty command list", () => {
@@ -319,13 +342,14 @@ test("configure rejects an empty command list", () => {
   assert.throws(() => iso.ctx.dispatch("configure", { device: "R1", lines: [] }), /no lines supplied/);
 });
 
-test("show runs one command through the same console path", () => {
+test("show runs one command through the exec path", () => {
   const iso = loadBridge();
-  const device = addMockDevice(iso, { name: "R1", type: 0 });
+  const device = addMockDevice(iso, { name: "R1", type: 0, prompt: "R1#" });
 
   const result = plain(iso.ctx.dispatch("show", { device: "R1", command: "show ip interface brief" }));
 
   assert.deepEqual(device.commands, ["show ip interface brief"]);
+  assert.equal(result.effective_mode, "exec");
   assert.match(result.output, /show ip interface brief/);
 });
 

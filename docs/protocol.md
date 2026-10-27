@@ -71,16 +71,27 @@ tool renders that as `{"ok": false, "error": "Packet Tracer bridge error for op
 |---|---|---|---|
 | `ping` | — | `{"version": "9.0.1…", "deviceCount": N}` | `pt_status` |
 | `list_devices` | — | `{"devices": [{name, type, typeName, model}], "links": N}` | `pt_list_devices` |
-| `add_device` | `{name, type, model, x, y}` | `{"name": "<actual name>"}` | `pt_add_device` |
+| `add_device` | `{name, type, model, x, y}` | `{"name": "<actual name>", "ready": bool}` | `pt_add_device` |
 | `remove_device` | `{name}` | `{"removed": true\|false}` | `pt_remove_device` |
 | `link` | `{a, aPort, b, bPort, cable}` | `{"linked": true}` | `pt_link` |
 | `autolink` | `{a, b}` | `{"ok": true}` | `pt_autolink` |
-| `configure` | `{device, lines: [string]}` | `{"output": "…", "prompt": "R1(config)#"}` | `pt_configure` |
-| `show` | `{device, command}` | `{"output": "…", "prompt": "R1#"}` | `pt_show` |
+| `get_state` | `{device}` | `{"name", "prompt", "mode", "booting", "hasIos", "type", "model"}` | — (used by `wait_ready`) |
+| `plan` | `{device, lines, mode, keep_session}` | `{"lines": [string], "mode": "auto", "effective_mode": "raw"\|"exec"\|"config", "prompt", "booting"}` | `pt_configure(dry_run=True)` |
+| `configure` | `{device, lines, mode, keep_session, stop_on_error, timeout_ms}` | `{"prompt", "lines": [{line, prompt, output, ok}], "output", "stopped_on", "ok", "mode", "effective_mode"}` | `pt_configure` |
+| `exec` | `{device, command, timeout_ms}` | same shape as `configure`, `effective_mode: "exec"` | `pt_show` |
+| `show` | `{device, command}` | alias of `exec`, kept for older clients | — |
 | `power` | `{device, on: bool}` | `{"ok": true}` | `pt_power` |
 | `skip_boot` | `{device}` | `{"ok": true}` | — (bridge-level; reachable via `pt_raw`) |
 | `save` | `{path}` | `{"saved": true, "path": "…"}` | `pt_save` |
 | `eval` | `{js}` | `{"value": "<stringified>"}` | `pt_raw` |
+
+`mode` in `plan`/`configure` is `auto` (default), `raw`, `exec` or `config`; the
+bridge resolves it against the device's prompt and reports the outcome as
+`effective_mode`. `keep_session` suppresses the trailing `end`,
+`stop_on_error` (default true) stops at the first rejected line, and
+`timeout_ms` (default 3000) bounds each line. `lines[].output` is that line's
+delta only; `stopped_on` is `{index, line, prompt, reason, output}` with a
+**1-based** index. Full rules: [cli-semantics.md](cli-semantics.md).
 
 `type` in `add_device` accepts a `DeviceType` name (`"eRouter"`, `"eSwitch"`,
 `"ePc"`, …) or the integer value (0 = router) and is resolved inside the bridge.

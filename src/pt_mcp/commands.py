@@ -1,29 +1,30 @@
-"""CLI command normalization for the ``pt_configure`` tool.
+"""CLI input cleanup for the ``pt_configure`` tool — split and strip only.
 
-An agent usually sends the interesting lines only — "hostname R1", an interface
-block, ``no shutdown`` — leaving out the modal wrappers. Packet Tracer's console
-line, unlike a human at the terminal, is unforgiving about that: commands are
-typed into whatever mode the device is currently in. :func:`normalize_commands`
-therefore makes the sequence self-contained before it leaves the server:
+This module used to carry the *mode* policy (prepending ``enable`` and
+``configure terminal``, appending ``end``). That decision moved into
+``bridge/bridge.js`` (PTM-02), because only the bridge can see the prompt after
+every line — and because a PC's ``Command Prompt`` must not receive a single
+injected line, which the server could not know.
 
-* accepts a newline-separated **string** or a **list** of strings (list items may
+What remains here is transport-agnostic tidying:
+
+* accept a newline-separated **string** or a **list** of strings (list items may
   themselves be multi-line, e.g. pasted config blocks);
-* drops blank lines and ``!`` comment lines;
-* prepends ``enable`` and ``configure terminal`` when neither form is present
-  (``en``, ``conf t``, ``config t`` and ``configure t`` all count);
-* appends ``end`` when the sequence does not already finish with it.
+* drop blank lines and ``!`` comment lines;
+* strip surrounding whitespace from every line;
+* raise :class:`ValueError` when nothing is left.
+
+Which wrappers (if any) are added is decided by the bridge, per device and per
+prompt: see ``docs/cli-semantics.md``.
 """
 
 from __future__ import annotations
-
-_ENABLE_WORDS = {"enable", "en"}
-_CONF_WORDS = {"configure terminal", "conf t", "config t", "configure t", "configure"}
 
 __all__ = ["normalize_commands"]
 
 
 def normalize_commands(commands: str | list[str]) -> list[str]:
-    """Normalize CLI input into an ordered list ready for the device.
+    """Split, strip and de-comment CLI input, preserving the order given.
 
     Raises :class:`ValueError` when nothing is left after stripping blanks and
     comments, so the caller can answer the tool with an actionable error instead
@@ -46,15 +47,4 @@ def normalize_commands(commands: str | list[str]) -> list[str]:
     if not cleaned:
         raise ValueError("pt_configure: no commands after stripping blanks/comments")
 
-    lowered = [command.lower() for command in cleaned]
-
-    prefix: list[str] = []
-    if not any(command in _ENABLE_WORDS for command in lowered):
-        prefix.append("enable")
-    if not any(command in _CONF_WORDS for command in lowered):
-        prefix.append("configure terminal")
-
-    final = prefix + cleaned
-    if final[-1].lower() != "end":
-        final.append("end")
-    return final
+    return cleaned

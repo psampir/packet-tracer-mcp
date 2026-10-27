@@ -4,41 +4,91 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-10-27
+
+Prompt-aware CLI modes, device readiness and dry runs. **The Packet Tracer side
+must be updated too**: replace the Script Engine file with the new
+`bridge/bridge.js` and Stop → Start the module (see
+[docs/setup.md §6](docs/setup.md#6-updating-the-bridge-later)).
 
 ### Added
 
-- **Architecture doc** ([docs/architecture.md](docs/architecture.md)): why the transport is a
-  directory of JSON files (no sockets, no wall-clock timers in the PT Script Engine, `SystemFileManager`
-  as the only host bridge), the component layout and end-to-end flow as Mermaid diagrams, the
-  `pt_configure` call sequence with its atomic-write/dedupe/mode handling, execution semantics
-  (active `.pkt` only, serial jobs, `Run File` recovery, server-side timeout cleanup), the security
-  and privilege model including `pt_raw` as an escape hatch, and a failure-mode table.
-- **Tag-driven release workflow** (`.github/workflows/release.yml`): a `v*` tag verifies that the tag
-  equals `project.version` in `pyproject.toml`, runs ruff + pytest, then `uv build` and publishes the
-  wheel and sdist to a GitHub Release with generated notes.
-- **Node test harness for the PT-side bridge** (`tests/bridge/`): `harness.js` loads
-  `bridge/bridge.js` **unmodified** into a `node:vm` context and fakes the host it runs against inside
-  Packet Tracer — `ipc.appWindow()`/`network()`/`systemFileManager()` (an in-memory directory + file
-  map), mock devices whose `ConsoleLine` has `getOutput()` and whose `TerminalLine` deliberately does
-  not, and a recording file watcher. 41 `node:test` cases cover the pure helpers (`resolveDeviceType`,
-  `resolveCable`, `baseName`, `tail`, `safeId`, `safeStringify`), every dispatch op, the
-  job → result file transport (dedupe via `PT_MCP_SEEN`, invalid JSON, unknown device, several jobs per
-  scan, the `writePlainTextToFile` fallback) and `main()`/watcher startup. Node built-ins only: no npm
-  dependencies and no Packet Tracer needed.
-- **Python coverage gate** (`pytest-cov`): `[tool.coverage.run]`/`[tool.coverage.report]` in
-  `pyproject.toml` with `fail_under = 85`, plus tests for the previously uncovered timeout-parsing and
-  retry paths (partially written result, mismatched id, missing mailbox directory) — 100% line
-  coverage of `pt_mcp`.
+- **Readiness (`wait_ready`, PTM-01).** `pt_configure` and `pt_show` wait — in
+  real time, polling `get_state` every 250 ms — until a device shows a usable
+  prompt (`>`, `#`, `(config…)#`, `C:\>`) before typing anything, bounded by
+  `ready_timeout` (default 45 s). `pt_add_device` now answers
+  `{"name": …, "ready": false}` while the device boots, and
+  `pt_power(..., ready=True)` waits after powering on. A freshly added 2911 or
+  2960 no longer eats the first configuration as wizard answers or `% Invalid
+  input`.
+- **`dry_run` for `pt_configure` (PTM-16).** Returns the exact line sequence the
+  bridge would send — wrappers included — without sending or waiting, via the
+  new bridge `plan` op: `{"dry_run": true, "lines": [...], "mode": "auto",
+  "effective_mode": "config"}`.
+- **New bridge ops** `get_state`, `plan`, `configure`, `exec` (and `show` kept as
+  an `exec` alias): per-device prompt/mode/boot state, planning, and line-by-line
+  execution with per-line results. The wire format is unchanged.
+- **Per-line results (PTM-06).** Every `pt_configure`/`pt_show` result now carries
+  `lines: [{line, prompt, output, ok}]` with each line's own output delta, plus
+  `stopped_on: {index, line, prompt, reason, output}` — a **1-based** index into
+  the injected sequence — and `failed: [index]` when `stop_on_error=false`.
+- **[docs/cli-semantics.md](docs/cli-semantics.md)**: the mode table
+  (`auto|raw|exec|config`), prefix/suffix rules, prompt detection, the per-line
+  wait and error format, readiness, `dry_run`, `keep_session`, `stop_on_error`,
+  and the "a PC/shell gets zero insertions" guarantee.
+- **Node harness models a CLI**: mock devices now have a prompt state machine
+  (`>` → `#` → `(config)#` → `(config-if)#`, `end`, `exit`), per-type IOS-ness,
+  PCs starting at `C:\>`, a rejectable line and a boot delay. 72 Node tests
+  (was 41).
+- **PTM-01/02/06/16 test coverage**: `tests/test_ready.py` (readiness retry,
+  timeout message, `pt_power(ready=True)`), rewritten `tests/test_commands.py`
+  and a new `tests/bridge/cli.test.js`.
 
 ### Changed
 
-- **README**: new *Architecture* and *Releasing* sections pointing at the design doc, the wire
-  protocol, the PT setup guide and the tag/re-tag procedure; the *Development* section now lists the
-  coverage command and the Node suite and points at `tests/bridge/`.
-- **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) now runs the Node bridge suite after
-  lint and pytest under an 85% coverage gate (`--cov=pt_mcp --cov-fail-under=85`), and `uv.lock` is
-  refreshed for `pytest-cov` so `uv sync --frozen` keeps working.
+- **BREAKING (0.2.0): `pt_link(a, a_port, b, b_port, cable=…)` and
+  `pt_autolink(a, b)`.** The old `dev_a/port_a/dev_b/port_b` names are gone so
+  both ends follow one convention (PTM-16).
+- **`normalize_commands()` is split + strip only (PTM-02).** All
+  `enable`/`configure terminal`/`end` policy moved into `bridge/bridge.js`,
+  which is the only side that can see the prompt. Devices without IOS
+  (`ePc`, `eServer`, `ePrinter`, `eLaptop`, access points, phones, IoT) always
+  get the lines verbatim.
+- **`pt_configure` signature**: `mode="auto"`, `keep_session=False`,
+  `stop_on_error=True`, `dry_run=False`, `ready_timeout=45`; `pt_show` gained
+  `ready_timeout`; `pt_power` gained `ready`/`ready_timeout`.
+- **Architecture, protocol and setup docs** describe the new ops, the wait and
+  the Script Module update procedure; README tool table updated.
+- Version bumped to `0.2.0` (`pyproject.toml`, `pt_mcp.__version__`, `uv.lock`).
+
+### Fixed
+
+- **PTM-02 — no more unconditional wrappers.** A PC running
+  `pt_configure(["ping …"])` sends exactly one line (no `Invalid Command.` ahead
+  of it); a switch at `Switch#` running `show vlan brief` stays in exec mode (no
+  DNS-lookup lockup); `end` is only ever sent from config mode; `enable` only from
+  user exec.
+- **PTM-06 — commands are no longer batched.** Each line waits for its prompt
+  change (or 120 ms of a stable buffer, capped by `timeout_ms`) before the next
+  one, so a 30-line block lands in order, and a rejected or stuck line is
+  reported with its index, text and prompt instead of being skipped.
+- **PTM-01 — boot-time configuration corruption** (wizard answers, `% Invalid
+  input`) is prevented by waiting for the prompt before sending.
+- **PTM-16 — no more guessing the name convention** for links, and a mode bug can
+  be caught with `dry_run` before it costs a console.
+
+### Previously unreleased (now part of 0.2.0)
+
+- **Architecture doc** ([docs/architecture.md](docs/architecture.md)): why the
+  transport is a directory of JSON files (no sockets, no wall-clock timers in the
+  PT Script Engine, `SystemFileManager` as the only host bridge), the component
+  layout and end-to-end flow as Mermaid diagrams, execution semantics, the
+  security and privilege model and a failure-mode table.
+- **Tag-driven release workflow** (`.github/workflows/release.yml`).
+- **Node test harness for the PT-side bridge** (`tests/bridge/`): loads
+  `bridge/bridge.js` **unmodified** into a `node:vm` context.
+- **Python coverage gate** (`pytest-cov`, `fail_under = 85`); the suite is at
+  100% line coverage of `pt_mcp`.
 
 ## [0.1.0] - 2026-10-27
 
@@ -61,8 +111,8 @@ All notable changes to this project are documented here. The format follows
 - **ES5-only script module** (`bridge/bridge.js`, QtScript-safe) covering devices, links, CLI,
   power, save and a deliberate `eval` escape hatch, with a file watcher plus an explicit rescan path
   for builds where watcher events don't fire.
-- **Offline test suite** (pytest, 44 tests) driven by `tests/fake_bridge.py`, a stand-in that speaks
-  the same protocol; no Packet Tracer and no network needed.
+- **Offline test suite** (pytest) driven by `tests/fake_bridge.py`, a stand-in that speaks the same
+  protocol; no Packet Tracer and no network needed.
 - **Docs**: click-by-click Script Module installation with security privileges
   ([docs/setup.md](docs/setup.md)), the wire protocol and cleanup semantics
   ([docs/protocol.md](docs/protocol.md)), an opencode client snippet
@@ -70,4 +120,5 @@ All notable changes to this project are documented here. The format follows
 - **Tooling**: hatchling package layout, `uv` lockfile, ruff (100 cols, py312) and a GitHub Actions
   workflow running lint + tests.
 
+[0.2.0]: https://github.com/psampir/packet-tracer-mcp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/psampir/packet-tracer-mcp/releases/tag/v0.1.0

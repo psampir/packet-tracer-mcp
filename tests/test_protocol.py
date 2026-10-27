@@ -43,6 +43,12 @@ def test_pt_add_device_returns_name(jload) -> None:
     assert added["name"] == "R1"
 
 
+def test_pt_add_device_reports_readiness(jload) -> None:
+    """PTM-01: the flag is non-blocking; the caller decides whether to wait."""
+    added = jload(server.pt_add_device("R2", "eRouter", "2911"))
+    assert added["ready"] is True
+
+
 def test_pt_list_devices_includes_added(jload) -> None:
     jload(server.pt_add_device("SW1", "eSwitch", "2960-24TT"))
     listed = jload(server.pt_list_devices())
@@ -77,9 +83,21 @@ def test_pt_link(jload) -> None:
     assert linked["linked"] is True
 
 
+def test_pt_link_uses_the_a_b_convention(jload) -> None:
+    """PTM-16: one naming convention for both ends (a / a_port, b / b_port)."""
+    linked = jload(
+        server.pt_link(a="R1", a_port="GigabitEthernet0/0", b="SW1", b_port="GigabitEthernet0/1")
+    )
+    assert linked["linked"] is True
+
+
 def test_pt_autolink(jload) -> None:
     auto = jload(server.pt_autolink("R1", "SW1"))
     assert auto["ok"] is True
+
+
+def test_pt_autolink_uses_the_a_b_convention(jload) -> None:
+    assert jload(server.pt_autolink(a="R1", b="SW1"))["ok"] is True
 
 
 # --------------------------------------------------------------------------
@@ -101,25 +119,55 @@ def test_pt_configure_returns_prompt(jload) -> None:
     assert conf["prompt"].startswith("R1")
 
 
-def test_pt_configure_auto_adds_enable(jload) -> None:
+def test_pt_configure_reports_mode_and_effective_mode(jload) -> None:
     conf = jload(server.pt_configure("R1", "hostname R1"))
-    assert "enable" in conf["output"]
+    assert conf["mode"] == "auto", "the requested mode is echoed back"
+    assert conf["effective_mode"] == "config", "a config line at R1# becomes config"
 
 
-def test_pt_configure_auto_adds_configure_terminal(jload) -> None:
+def test_pt_configure_wraps_a_config_block(jload) -> None:
     conf = jload(server.pt_configure("R1", "hostname R1"))
-    assert "configure terminal" in conf["output"]
+    sent = [entry["line"] for entry in conf["lines"]]
+    assert sent == ["configure terminal", "hostname R1", "end"]
 
 
-def test_pt_configure_auto_adds_end(jload) -> None:
-    conf = jload(server.pt_configure("R1", "hostname R1"))
-    assert "end" in conf["output"]
+def test_pt_configure_wraps_a_switch_block(jload) -> None:
+    jload(server.pt_add_device("SW2", "eSwitch", "2960-24TT"))
+    conf = jload(server.pt_configure("SW2", "vlan 10"))
+    sent = [entry["line"] for entry in conf["lines"]]
+    assert sent == ["configure terminal", "vlan 10", "end"]
 
 
 def test_pt_configure_accepts_list(jload) -> None:
     conf = jload(server.pt_configure("R1", ["hostname R1", "! comment", "  "]))
     assert conf["prompt"].startswith("R1")
     assert "! comment" not in conf["output"]
+
+
+def test_pt_configure_passes_mode_and_keep_session(jload) -> None:
+    jload(server.pt_add_device("R-KEEP", "eRouter", "2911"))
+    conf = jload(
+        server.pt_configure("R-KEEP", "vlan 10", mode="config", keep_session=True)
+    )
+    assert conf["mode"] == "config"
+    assert conf["effective_mode"] == "config"
+    assert [entry["line"] for entry in conf["lines"]] == ["configure terminal", "vlan 10"]
+
+
+def test_pt_configure_dry_run_returns_the_plan_without_sending(jload) -> None:
+    jload(server.pt_add_device("R-DRY", "eRouter", "2911"))
+    planned = jload(server.pt_configure("R-DRY", "hostname R1", dry_run=True))
+    assert planned["dry_run"] is True
+    assert planned["lines"] == ["configure terminal", "hostname R1", "end"]
+    assert planned["mode"] == "auto"
+    assert "output" not in planned, "a dry run never touches the console"
+
+
+def test_pt_configure_dry_run_on_a_pc_sends_nothing_extra(jload) -> None:
+    jload(server.pt_add_device("PC-DRY", "ePc", "PC-PT"))
+    planned = jload(server.pt_configure("PC-DRY", ["ping 192.168.20.10"], dry_run=True))
+    assert planned["lines"] == ["ping 192.168.20.10"]
+    assert planned["effective_mode"] == "raw"
 
 
 def test_pt_configure_rejects_empty_input(jload) -> None:
@@ -131,6 +179,13 @@ def test_pt_configure_rejects_empty_input(jload) -> None:
 def test_pt_show(jload) -> None:
     shown = jload(server.pt_show("R1", "show ip interface brief"))
     assert "show ip interface brief" in shown["output"]
+    assert shown["effective_mode"] == "exec"
+
+
+def test_pt_show_rejects_an_empty_command(jload) -> None:
+    shown = jload(server.pt_show("R1", "   "))
+    assert shown["ok"] is False
+    assert "no command supplied" in shown["error"]
 
 
 # --------------------------------------------------------------------------

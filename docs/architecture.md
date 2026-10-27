@@ -12,6 +12,7 @@ repository. Everything below elaborates that one sentence.
 | **This file** | why each piece exists, how they fit, what breaks |
 | [setup.md](setup.md) | the one-time Script Module clicks in the PT GUI |
 | [protocol.md](protocol.md) | the exact wire format, op list, cleanup rules |
+| [cli-semantics.md](cli-semantics.md) | prompt/mode rules, per-line waiting, readiness, `dry_run` |
 | [../README.md](../README.md) | usage, tools, troubleshooting |
 
 ## Purpose
@@ -94,7 +95,7 @@ and needs no credential — only the PT privileges you granted the module (see
 | Layer | Lives in | Responsibility |
 |---|---|---|
 | **MCP client (agent)** | opencode / Claude / any stdio client | Turns user intent into tool calls; never sees a file path. |
-| **`pt_mcp.server`** | `src/pt_mcp/server.py` | Eleven MCP tools over stdio; normalizes input, renders every failure as `{"ok": false, "error": …}`. |
+| **`pt_mcp.server`** | `src/pt_mcp/server.py` | Eleven MCP tools over stdio; splits input, waits for a usable prompt, renders every failure as `{"ok": false, "error": …}`. |
 | **Transport** | `src/pt_mcp/protocol.py`, `src/pt_mcp/config.py` | Atomic job write, 50 ms polling, stale-id detection, cleanup on success and on timeout. |
 | **Mailbox** | `$PT_MCP_HOME/{jobs,results,saved}` | The only shared state. Defaults to `~/.local/share/pt-mcp`. |
 | **`bridge/bridge.js`** | inside Packet Tracer (Script Module `com.psampir.ptmcp`) | File watcher + job dedupe + op dispatch; the only code that touches the PT API. |
@@ -136,18 +137,25 @@ sequenceDiagram
     participant P as PT ipc / ConsoleLine
     participant R as results/
 
-    A->>S: pt_configure(device, commands)
-    S->>S: drop blanks and "!", prepend enable<br/>and configure terminal, append end
+    A->>S: pt_configure(device, commands, mode, dry_run)
+    S->>S: drop blanks and "!" — no mode policy here
+    opt dry_run
+        S->>B: plan (no get_state wait, nothing is typed)
+        B-->>S: the exact lines that would be sent
+    end
+    S->>B: get_state (wait_ready, every 250 ms up to ready_timeout)
+    B-->>S: prompt + mode + booting
     S->>J: write ID.json.tmp, then os.replace() to ID.json
     Note over J,B: the atomic rename means the watcher<br/>never sees a half-written job
     J-->>B: directoryChanged / fileChanged
     B->>B: dedupe by id (PT_MCP_SEEN)
     B->>J: read and parse the job
-    loop every normalized line
+    B->>P: getConsoleLine().getPrompt()
+    B->>B: plan: enable / configure terminal / end<br/>only where the prompt needs them
+    loop every planned line
         B->>P: enterCommand(line)
-        P-->>B: console absorbs it, enable then config then body then end
+        P-->>B: prompt changes, or the output delta settles
     end
-    B->>P: flush(500), getOutput(), getPrompt()
     B->>R: write the response object
     B->>J: delete ID.json
     S->>R: poll hits ID.json, parse it
@@ -168,18 +176,43 @@ this PT session, so a duplicate watcher event (these fire in bursts) cannot run 
 config twice. The bridge deletes the job **after** writing the result, so a crash
 between the two leaves a job that a later rescan will retry — the safe direction.
 
-**Mode, and why the sequence is self-contained.** Console state is modal: `enable`
-gets you `#`, `configure terminal` gets you `(config)#`, an interface block gets
-you `(config-if)#`. An agent that sends only the interesting lines ("hostname
-R1", "no shutdown") would otherwise type them into whatever mode the previous
-call left behind. `normalize_commands()` therefore wraps the payload:
-`enable` → `configure terminal` → body → `end`, each inserted only when absent.
-On the bridge, lines go through the device's `ConsoleLine.enterCommand(cmd)`
-(preferred — it exposes `getOutput()` and `getPrompt()`), falling back to
+**Mode, and why the sequence is computed on the PT side.** Console state is
+modal: `enable` gets you `#`, `configure terminal` gets you `(config)#`, an
+interface block gets you `(config-if)#`. An agent that sends only the interesting
+lines ("hostname R1", "no shutdown") would otherwise type them into whatever mode
+the previous call left behind — but the server cannot know that mode, and cannot
+know whether the target is a PC's `C:\>` at all.
+
+So `normalize_commands()` only splits and strips, and the bridge asks the device
+for its prompt (`getPrompt()`) and decides:
+
+| Prompt | `auto` does |
+|---|---|
+| `C:\>` (shell) | sends the lines verbatim — **zero** insertions on a PC |
+| `Switch>` | prepends `enable`, then decides again |
+| `Switch#` | `configure terminal` + body + `end`, unless the first line is an exec verb (`show`, `ping`, …) |
+| `S1(config)#` | body + `end` |
+
+`mode="raw"` disables all of it, `mode="exec"` never enters config, `mode="config"`
+forces the wrappers, and `keep_session=True` drops the trailing `end`. The
+requested mode and the resolved one are both returned (`mode`, `effective_mode`),
+and `dry_run=True` returns the plan without typing anything — the cheapest way to
+catch a mode bug before it costs a console. Full rules:
+[cli-semantics.md](cli-semantics.md).
+
+Lines go through the device's `ConsoleLine.enterCommand(cmd)` (preferred — it
+exposes `getOutput()` and `getPrompt()`), falling back to
 `CiscoDevice.enterCommand(cmd, mode)` with an **empty** mode string, meaning
-"keep the line's current mode". Mode transitions are therefore *explicit in the
-command list*, not guessed by the transport. That is what makes a stateless,
-one-file-per-call protocol sufficient for a stateful CLI.
+"keep the line's current mode". Each line is sent **alone**, then the bridge
+waits for the prompt to change or for the output buffer to stay unchanged for
+120 ms, and reports that line's delta, `ok` flag and prompt (PTM-06). A line that
+is rejected or never settles is reported with its 1-based index instead of being
+skipped silently.
+
+**Readiness is the server's job.** The bridge must not spin for tens of seconds
+(no timers), so the *server* polls `get_state` every 250 ms with a real
+`time.sleep` until a freshly added router leaves
+`--- System Configuration Dialog ---` and shows a prompt (PTM-01).
 
 **Atomicity on the way out — best effort.** `SystemFileManager` has no `rename`,
 so the bridge writes the result in one call and the server tolerates a partial
@@ -201,7 +234,8 @@ Full detail — every op, every argument, every result shape — is in
 
 - `id` — 12 hex characters (`uuid4().hex[:12]`), also the file stem on both sides.
 - `op` — `ping`, `list_devices`, `add_device`, `remove_device`, `link`,
-  `autolink`, `configure`, `show`, `power`, `skip_boot`, `save`, `eval`.
+  `autolink`, `get_state`, `plan`, `configure`, `exec` (and `show` as its alias),
+  `power`, `skip_boot`, `save`, `eval`.
 - Exactly one of `result` / `error`. The server turns `error` into
   `PTBridgeError`, and the tool renders it as
   `{"ok": false, "error": "Packet Tracer bridge error for op '…': …"}`.
@@ -290,7 +324,7 @@ it is ordered by how often each one is the answer.
 | Timeout, and job files are never consumed | **Watcher silent** (FUSE/AppImage/network home) | Click **Run File** to force a rescan, call `ptmcp_rescan()`, or restart the module. Also verify the `PT_MCP_HOME` constant in `bridge.js` matches the server's `$PT_MCP_HOME`. |
 | `access denied` / privilege error in PT's log | **Privilege missing** | Enable *Application* + *File Operations* + *Get*/*Change Network Info* on the module, then Stop → Start. |
 | Error that the base dir does not exist | Bridge **never ran** | Start the module once (it creates `jobs/`, `results/`, `saved/`), or `mkdir -p` them. |
-| Commands succeed but `output` is empty or half a banner | **Device still booting** | Wait, retry, or `pt_power` it and poll `pt_show` until the prompt settles. `skip_boot` exists for scripted setups. |
+| Commands succeed but `output` is empty or half a banner | **Device still booting** | The server already waits up to `ready_timeout` (45 s); raise it, use `pt_power(..., ready=True)`, or `skip_boot` for scripted setups. |
 | `createLink` fails or the link is missing | **Wrong port name** — names are case-sensitive and model-specific | `pt_show` a `show ip interface brief`, or use `pt_autolink` and let PT choose compatible ports. |
 | Serial link is up but the interface stays `down` / protocol down | **Serial clock rate missing on the DCE end** | Configure `clock rate 64000` (and `no shutdown`) on the DCE side; `show controllers serial 0/0/0` tells you which end is DCE. |
 | `device not found: X` | Wrong name, or the device is in a non-active `.pkt` | `pt_list_devices` on the active file; bring the right lab to the front. |

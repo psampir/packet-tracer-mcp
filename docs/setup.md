@@ -45,6 +45,11 @@ the lab you want to drive in front.
    QtScript: `var` and `function` only — do not "modernise" it).
 4. Click **Apply** / **OK** to close the editor.
 
+> The 0.2.0 bridge adds the per-device mode/readiness logic (`get_state`, `plan`,
+> `configure`, `exec`), so **the old copy in PT must be replaced** — see
+> [§6](#6-updating-the-bridge-later). The rules it implements are in
+> [cli-semantics.md](cli-semantics.md).
+
 ### Security Privileges tab
 
 The bridge is sandboxed by PT and needs these privileges; anything you leave out
@@ -110,11 +115,21 @@ Fix, in this order:
 
 `bridge/bridge.js` is the single source of truth, and PT holds a **copy** of it:
 
-1. `git pull` in the repository.
+1. `git pull` in the repository (`bridge.js` changes are called out in the
+   [CHANGELOG](../CHANGELOG.md); 0.2.0 changed mode/readiness handling).
 2. Re-open *Configure PT Script Modules…* → module → **Script Engine** tab →
    select `bridge.js`.
-3. Replace the editor contents with the new file, **Apply**, then **Stop** →
-   **Start** the module.
+3. **Replace the editor contents** with the whole new file, click **Apply**.
+4. **Stop** the module, then **Start** it. The module keeps running the old
+   script until you do this — *Run File* only re-evaluates it, which is enough
+   for a rescan but not a substitute for Stop → Start.
+5. If the module does not come back, or the first call still behaves like the old
+   script, re-paste and Stop → Start again; a half-replaced file is the usual
+   cause.
+
+The CLI/mode rules the new file implements are documented in
+[cli-semantics.md](cli-semantics.md) — worth a skim before the first
+`pt_configure` after an update.
 
 ## 7. Uninstalling
 

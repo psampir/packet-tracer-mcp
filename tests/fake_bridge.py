@@ -33,8 +33,26 @@ _devices: dict[str, dict] = {}
 _links = 0
 _running = True
 
-_DEVICE_TYPES = {0: "eRouter", 1: "eSwitch", 8: "ePc", 9: "eServer"}
+_DEVICE_TYPES = {
+    0: "eRouter",
+    1: "eSwitch",
+    8: "ePc",
+    9: "eServer",
+    10: "ePrinter",
+    16: "eMultiLayerSwitch",
+    26: "eASA",
+    39: "eWirelessLanController",
+}
 _TYPE_IDS = {v: k for k, v in _DEVICE_TYPES.items()}
+
+#: Device types that speak IOS inside Packet Tracer (the bridge's allowlist).
+_IOS_TYPES = {0, 1, 16, 26, 39}
+
+_EXEC_VERBS = {
+    "show", "ping", "traceroute", "telnet", "ssh", "clear", "copy", "write",
+    "reload", "dir", "more", "debug", "undebug", "clock", "exit", "enable",
+    "disable", "configure", "terminal",
+}
 
 
 def _resolve_type(value):
@@ -45,6 +63,157 @@ def _resolve_type(value):
             return int(value)
         return _TYPE_IDS.get(value, 0)
     return 0
+
+
+def _prompt_mode(prompt: str) -> str:
+    """Classify a prompt the way the bridge does (see docs/cli-semantics.md)."""
+    text = str(prompt or "").rstrip()
+    if not text:
+        return "unknown"
+    if text.endswith("#"):
+        return "config" if "(config" in text else "enable"
+    if text.endswith(">"):
+        return "shell" if len(text) > 1 and text[1] == ":" else "user"
+    return "unknown"
+
+
+def _device(name: str):
+    device = _devices.get(name)
+    if device is None:
+        raise ValueError(f"device not found: {name}")
+    return device
+
+
+def _state(device: dict) -> dict:
+    prompt = str(device["prompt"])
+    return {
+        "name": device["name"],
+        "prompt": prompt,
+        "mode": _prompt_mode(prompt),
+        "booting": False,
+        "hasIos": device["type"] in _IOS_TYPES,
+        "type": device["type"],
+        "model": device["model"],
+    }
+
+
+def _first_meaningful(lines: list[str]) -> str:
+    for line in lines:
+        text = str(line).strip()
+        if text:
+            return text
+    return ""
+
+
+def _is_exec_verb(line: str) -> bool:
+    word = line.split()[0].lower() if line.split() else ""
+    return word in _EXEC_VERBS
+
+
+def _wrap_config(current_mode: str, lines: list[str], keep_session: bool) -> list[str]:
+    out: list[str] = []
+    if current_mode == "user":
+        out.append("enable")
+    if current_mode != "config":
+        out.append("configure terminal")
+    out.extend(lines)
+    last = ""
+    for line in reversed(lines):
+        if str(line).strip():
+            last = str(line).strip()
+            break
+    if not keep_session and last.lower() != "end":
+        out.append("end")
+    return out
+
+
+def _plan(device: dict, args: dict) -> dict:
+    """A deliberately small mirror of the bridge's mode rules."""
+    plan = _plan_lines(device, args)
+    state = _state(device)
+    plan["prompt"] = state["prompt"]
+    plan["booting"] = state["booting"]
+    return plan
+
+
+def _plan_lines(device: dict, args: dict) -> dict:
+    lines = [str(line) for line in (args.get("lines") or [])]
+    if not lines:
+        raise ValueError("plan: no lines supplied")
+    requested = str(args.get("mode") or "auto").lower()
+    if requested not in {"auto", "raw", "exec", "config"}:
+        raise ValueError(f"unknown mode '{args.get('mode')}'; valid: auto, raw, exec, config")
+    keep = bool(args.get("keep_session"))
+    state = _state(device)
+    mode = state["mode"]
+
+    if not state["hasIos"] or requested == "raw":
+        return {"lines": lines, "mode": requested, "effective_mode": "raw"}
+    if requested == "exec":
+        prefix = ["enable"] if mode == "user" else []
+        return {"lines": prefix + lines, "mode": requested, "effective_mode": "exec"}
+    if requested == "config":
+        return {
+            "lines": _wrap_config(mode, lines, keep),
+            "mode": requested,
+            "effective_mode": "config",
+        }
+    # auto
+    if mode == "config":
+        return {
+            "lines": _wrap_config("config", lines, keep),
+            "mode": requested,
+            "effective_mode": "config",
+        }
+    if mode in ("user", "enable"):
+        prefix = ["enable"] if mode == "user" else []
+        if _is_exec_verb(_first_meaningful(lines)):
+            return {"lines": prefix + lines, "mode": requested, "effective_mode": "exec"}
+        return {
+            "lines": prefix + _wrap_config("enable", lines, keep),
+            "mode": requested,
+            "effective_mode": "config",
+        }
+    return {"lines": lines, "mode": requested, "effective_mode": "raw"}
+
+
+def _apply_line(device: dict, line: str) -> None:
+    """Track just enough prompt state for follow-up calls to look plausible."""
+    text = line.lower()
+    name = device["name"].split("(")[0]
+    if text in ("enable", "en") or text == "end":
+        device["prompt"] = f"{name}#"
+    elif text in ("configure terminal", "conf t", "config t", "configure t"):
+        device["prompt"] = f"{name}(config)#"
+    elif text.startswith("interface "):
+        device["prompt"] = f"{name}(config-if)#"
+    elif text == "exit":
+        device["prompt"] = f"{name}(config)#" if "(config-if" in device["prompt"] else f"{name}#"
+
+
+def _run(device: dict, plan: dict) -> dict:
+    requested = plan["mode"]
+    effective = plan["effective_mode"]
+    records = []
+    for line in plan["lines"]:
+        _apply_line(device, line)
+        records.append(
+            {
+                "line": line,
+                "prompt": device["prompt"],
+                "output": f"[fake] {line}\n",
+                "ok": True,
+            }
+        )
+    return {
+        "ok": True,
+        "prompt": device["prompt"],
+        "lines": records,
+        "output": "".join(record["output"] for record in records),
+        "stopped_on": None,
+        "mode": requested,
+        "effective_mode": effective,
+    }
 
 
 def handle(op: str, args: dict):
@@ -72,8 +241,10 @@ def handle(op: str, args: dict):
             "name": name,
             "type": type_id,
             "model": args.get("model", ""),
+            # IOS devices start at their enable prompt; hosts at a shell.
+            "prompt": f"{name}#" if type_id in _IOS_TYPES else "C:\\>",
         }
-        return {"name": name}
+        return {"name": name, "ready": True}
 
     if op == "remove_device":
         name = args.get("name")
@@ -89,19 +260,22 @@ def handle(op: str, args: dict):
         _links += 1
         return {"ok": True}
 
-    if op == "configure":
-        device = args.get("device", "?")
-        lines = args.get("lines", [])
-        body = "\n".join(lines)
-        return {
-            "output": f"[fake] {device} received:\n{body}\n",
-            "prompt": f"{device}(config)#",
-        }
+    if op == "get_state":
+        return _state(_device(args.get("device", "")))
 
-    if op == "show":
-        device = args.get("device", "?")
-        command = args.get("command", "")
-        return {"output": f"[fake] {command}\n{device}#", "prompt": f"{device}#"}
+    if op == "plan":
+        return _plan(_device(args.get("device", "")), args)
+
+    if op == "configure":
+        device = _device(args.get("device", ""))
+        return _run(device, _plan(device, args))
+
+    if op in ("exec", "show"):
+        device = _device(args.get("device", ""))
+        command = str(args.get("command", ""))
+        if not command.strip():
+            raise ValueError(f"{op}: no command supplied")
+        return _run(device, _plan(device, {"lines": [command], "mode": "exec"}))
 
     if op == "power":
         return {"ok": True}

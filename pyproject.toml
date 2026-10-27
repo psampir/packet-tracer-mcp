@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "packet-tracer-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP server that lets an AI agent configure Cisco Packet Tracer through its Script Module IPC bridge."
 readme = "README.md"
 requires-python = ">=3.12"

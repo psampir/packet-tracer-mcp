@@ -13,7 +13,9 @@
  *   - an in-memory filesystem (`mem`) with the subset of SystemFileManager
  *     bridge.js actually calls
  *   - mock devices with a ConsoleLine (has getOutput) and a TerminalLine (does
- *     not — that difference is the point of `enterLines()`)
+ *     not — that difference is the point of getCommandLine()), plus a prompt
+ *     state machine (`>` → `#` → `(config)#` → `(config-if)#`, `end`, `exit`) so
+ *     the CLI rules in bridge.js have something IOS-shaped to act on
  *
  * The first evaluation of bridge.js does not call main() (PT_MCP_EVALS === 1),
  * so loading is side-effect-free and every test starts from a clean context.
@@ -132,34 +134,103 @@ function createMemFS() {
 }
 
 /**
+ * DeviceType ids that speak IOS inside Packet Tracer. Everything else (PC,
+ * server, printer, laptop, access point, phone, IoT, ...) has no enable/config
+ * mode, which is exactly the distinction the bridge's `hasIos` exposes.
+ */
+const IOS_TYPES = new Set([0, 1, 16, 26, 39]);
+
+/** Classify a mock prompt: user, enable, config, config-if, shell, unknown. */
+function promptModeOf(prompt) {
+  const p = String(prompt === undefined || prompt === null ? "" : prompt).replace(/\s+$/, "");
+  if (!p) {
+    return "unknown";
+  }
+  const last = p.slice(-1);
+  if (last === "#") {
+    return p.includes("(config-if") ? "config-if" : p.includes("(config") ? "config" : "enable";
+  }
+  if (last === ">") {
+    return /^[A-Za-z]:[\\/]/.test(p) ? "shell" : "user";
+  }
+  return "unknown";
+}
+
+/** Host part of a prompt: "R1(config)#" -> "R1", "C:\>" -> "C:\>". */
+function hostOfPrompt(prompt) {
+  const m = /^(.+?)(\(config[^)]*\))?[#>]$/.exec(String(prompt).trim());
+  return m ? m[1] : String(prompt).trim();
+}
+
+/**
  * A mock device: ConsoleLine (with getOutput) and TerminalLine (without).
  *
+ * The ConsoleLine models the CLI, not just an echo: it has a prompt state
+ * machine (> -> # -> (config)# -> (config-if)# ...), so the bridge's mode and
+ * readiness logic is exercised against something that behaves like IOS.
+ *
  * Options:
- *   name, model, type          identity
+ *   name, model, type          identity (type decides IOS-ness)
+ *   hasIos                     override the type-derived IOS allowlist
+ *   prompt                     starting prompt (default "R1#"/"Name#", PC "C:\>")
+ *   host                       hostname in the prompt (default: from `prompt`)
  *   consoleLine: false         getConsoleLine() returns null -> TerminalLine path
  *   commandLine: false         getCommandLine() returns null -> "no command line"
  *   throwOnEnter: true         ConsoleLine.enterCommand() throws -> device.enterCommand fallback
- *   prompt                     ConsoleLine prompt (default "R1#")
+ *   rejectLine                 string/array/function: emit "% Invalid input ..." for that line
+ *   bootMs                     stay in boot (empty prompt) for this many milliseconds
+ *   bootPrompt                 prompt while booting (default "")
+ *   isBooting                  explicit isBooting() implementation
  */
 function createDevice(devices, options) {
   const opts = options || {};
+  const type = typeof opts.type === "number" ? opts.type : 8;
+  const ios = typeof opts.hasIos === "boolean" ? opts.hasIos : IOS_TYPES.has(type);
+  const name = String(opts.name === undefined ? "PC" : opts.name);
+  const givenPrompt = typeof opts.prompt === "string" ? opts.prompt : null;
+  const shellPrompt =
+    givenPrompt && /^[A-Za-z]:[\\/]/.test(givenPrompt) ? givenPrompt : "C:\\>";
+  const bootPrompt = typeof opts.bootPrompt === "string" ? opts.bootPrompt : "";
+  const bootUntil = opts.bootMs ? Date.now() + Number(opts.bootMs) : 0;
+  const startMode = ios ? promptModeOf(givenPrompt === null ? "Name#" : givenPrompt) : "shell";
+
   const consoleLine = {
     commands: [],
     output: "",
-    prompt: typeof opts.prompt === "undefined" ? "R1#" : String(opts.prompt),
     flushArgs: [],
     enterCommand(cmd) {
       if (opts.throwOnEnter) {
         throw new Error("console line is busy");
       }
-      consoleLine.commands.push(String(cmd));
-      consoleLine.output += String(cmd) + "\n";
+      const text = String(cmd);
+      consoleLine.commands.push(text);
+      /* freezeAfter: N commands behave; later ones are swallowed by the mock
+       * (no echo, no prompt change) to exercise the per-line timeout. */
+      if (typeof opts.freezeAfter === "number" && consoleLine.commands.length > opts.freezeAfter) {
+        return;
+      }
+      consoleLine.output += text + "\n";
+      if (Date.now() < bootUntil) {
+        consoleLine.output += "--- System Configuration Dialog ---\n";
+        return;
+      }
+      if (isRejected(text, consoleLine.commands.length)) {
+        consoleLine.output += "% Invalid input detected at '^' marker.\n";
+        return;
+      }
+      if (!ios) {
+        if (/^ping\b/.test(text)) {
+          consoleLine.output += "Reply from 10.0.0.1: bytes=32 time=1ms TTL=128\n";
+        }
+        return;
+      }
+      applyIosCommand(text);
     },
     getOutput() {
       return consoleLine.output;
     },
     getPrompt() {
-      return consoleLine.prompt;
+      return currentPrompt();
     },
     flush(arg) {
       consoleLine.flushArgs.push(arg);
@@ -172,7 +243,7 @@ function createDevice(devices, options) {
       terminalLine.commands.push(String(cmd));
     },
     getPrompt() {
-      return ">";
+      return typeof opts.terminalPrompt === "string" ? opts.terminalPrompt : ">";
     },
     flush() {
       terminalLine.flushed = true;
@@ -181,9 +252,12 @@ function createDevice(devices, options) {
   };
 
   const device = {
-    name: String(opts.name === undefined ? "PC" : opts.name),
+    name,
     model: String(opts.model === undefined ? "" : opts.model),
-    type: typeof opts.type === "number" ? opts.type : 8,
+    type,
+    hasIos: ios,
+    host: String(opts.host === undefined ? hostOfPrompt(givenPrompt === null ? name + "#" : givenPrompt) : opts.host),
+    cliMode: startMode,
     consoleLine,
     terminalLine,
     consoleLineCalls: 0,
@@ -225,6 +299,9 @@ function createDevice(devices, options) {
     setName(newName) {
       devices.delete(device.name);
       device.name = String(newName);
+      if (!opts.host) {
+        device.host = String(newName);
+      }
       devices.set(device.name, device);
     },
     setPower(on) {
@@ -234,6 +311,87 @@ function createDevice(devices, options) {
       device.skippedBoot = true;
     },
   };
+
+  /* Optional isBooting(): PT exposes it on CiscoDevice, but the bridge also
+   * has a prompt-based fallback, so it is only defined when asked for. */
+  if (typeof opts.isBooting === "function") {
+    device.isBooting = opts.isBooting;
+  } else if (bootUntil) {
+    device.isBooting = () => Date.now() < bootUntil;
+  }
+
+  /** Prompt the device shows right now (boot state wins while it lasts). */
+  function currentPrompt() {
+    if (Date.now() < bootUntil) {
+      return bootPrompt;
+    }
+    if (device.cliMode === "unknown") {
+      return givenPrompt === null ? "" : givenPrompt;
+    }
+    if (!ios) {
+      return shellPrompt;
+    }
+    if (device.cliMode === "user") {
+      return device.host + ">";
+    }
+    if (device.cliMode === "config") {
+      return device.host + "(config)#";
+    }
+    if (device.cliMode === "config-if") {
+      return device.host + "(config-if)#";
+    }
+    return device.host + "#";
+  }
+
+  /** A line can be made unacceptable: string, list of strings, or predicate. */
+  function isRejected(text, index) {
+    const reject = opts.rejectLine;
+    if (typeof reject === "function") {
+      return !!reject(text, index);
+    }
+    if (Array.isArray(reject)) {
+      return reject.includes(text);
+    }
+    return typeof reject === "string" && reject === text;
+  }
+
+  /** The smallest IOS-like mode machine the bridge's rules need. */
+  function applyIosCommand(text) {
+    const lower = text.toLowerCase().replace(/\s+$/, "");
+    if (lower === "enable" || lower === "en") {
+      device.cliMode = "enable";
+      return;
+    }
+    if (lower === "disable") {
+      device.cliMode = "user";
+      return;
+    }
+    if (/^(configure terminal|conf t|config t|configure t)$/.test(lower)) {
+      device.cliMode = "config";
+      return;
+    }
+    if (lower === "end") {
+      device.cliMode = "enable";
+      return;
+    }
+    if (lower === "exit") {
+      if (device.cliMode === "config-if") {
+        device.cliMode = "config";
+      } else if (device.cliMode === "config") {
+        device.cliMode = "enable";
+      } else if (device.cliMode === "enable") {
+        device.cliMode = "user";
+      }
+      return;
+    }
+    if (lower.startsWith("interface ")) {
+      device.cliMode = device.cliMode === "config" ? "config-if" : device.cliMode;
+      return;
+    }
+    if (lower.startsWith("hostname ") && device.cliMode === "config") {
+      device.host = text.split(/\s+/)[1] || device.host;
+    }
+  }
 
   /* The ConsoleLine records into device.commands, per the bridge's contract. */
   device.commands = consoleLine.commands;
@@ -260,6 +418,8 @@ function loadBridge() {
   const saves = [];
   const links = [];
   const autoConnects = [];
+  /** Per-add options, consumed by logicalWorkspace.addDevice (tests push here). */
+  const addDeviceOptions = [];
 
   const watcher = {
     events: [],
@@ -287,7 +447,11 @@ function loadBridge() {
     addDevice(type, model, x, y) {
       const name = autoIndex === 0 ? "R-auto" : "R-auto-" + (autoIndex + 1);
       autoIndex++;
-      const device = createDevice(devices, { name, model: String(model), type });
+      const extra = addDeviceOptions.shift() || {};
+      const device = createDevice(
+        devices,
+        Object.assign({}, extra, { name, model: String(model), type }),
+      );
       device.x = x;
       device.y = y;
       devices.set(name, device);
@@ -373,6 +537,7 @@ function loadBridge() {
     saves,
     links,
     autoConnects,
+    addDeviceOptions,
     watcher,
     PT_MCP_HOME: ctx.PT_MCP_HOME,
     PT_MCP_JOBS: ctx.PT_MCP_JOBS,
