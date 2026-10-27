@@ -1,12 +1,12 @@
 name: CI
 
-# Lint and the full test suite on every push to main and every pull request.
+# Lint and the full test suite on every push to main or dev and every pull request.
 # No credentials and no Packet Tracer are needed: the suite is offline and drives
 # tests/fake_bridge.py, which answers on disk exactly like bridge/bridge.js does.
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
 
 permissions:
