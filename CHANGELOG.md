@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-10-28
+
+### Fixed
+
+- **`pt_raw` keeps the value's type.** The wrapper ran `eval()` on the
+  expression's *value*, so a string result was re-evaluated as code (`"ok"` →
+  `ReferenceError: ok is not defined`). The source is now embedded as a JSON
+  string literal, so `"ok"` stays `"ok"` and multi-line snippets still work.
+- **`pt_dns_record` enables the DNS service.** A Server-PT ships with the DNS
+  process disabled; adding records alone left `nslookup` timing out. The tool
+  now calls `DnsServerProcess.setEnable(true)` and reports the real `enabled`
+  state.
+
 ## [0.2.0] - 2026-10-27
 
 Prompt-aware CLI modes, device readiness and dry runs. **The Packet Tracer side
