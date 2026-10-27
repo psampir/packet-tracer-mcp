@@ -104,11 +104,13 @@ def wait_ready(device: str, timeout: float = READY_TIMEOUT) -> dict[str, Any]:
     deadline = time.monotonic() + max(timeout, 0.0)
     state: dict[str, Any] = {}
     answered_setup = False
+    pressed_return = False
 
     while True:
         state = call_pt("get_state", {"device": device})
+        prompt = str(state.get("prompt") or "")
 
-        if _SETUP_DIALOG_RE.search(str(state.get("prompt") or "")):
+        if _SETUP_DIALOG_RE.search(prompt):
             # A freshly added IOS device can sit at the initial-configuration
             # dialog; answer "no" once to reach the normal prompt. If it does
             # not take, the deadline below reports the dialog specifically.
@@ -121,6 +123,9 @@ def wait_ready(device: str, timeout: float = READY_TIMEOUT) -> dict[str, Any]:
                         {"device": device, "command": "no", "timeout_ms": 5000},
                     )
                 answered_setup = True
+                if time.monotonic() < deadline:
+                    time.sleep(READY_POLL_INTERVAL)
+                continue
             if time.monotonic() >= deadline:
                 raise PTBridgeError(
                     f"device '{device}' is stuck at the IOS initial-configuration "
@@ -129,6 +134,24 @@ def wait_ready(device: str, timeout: float = READY_TIMEOUT) -> dict[str, Any]:
                     "power-cycle it with pt_power(on=True, ready=True)."
                 )
             time.sleep(READY_POLL_INTERVAL)
+            continue
+
+        # After "no" IOS prints "Press RETURN to get started!" and shows no
+        # prompt; an empty line is the answer. Send it exactly once.
+        if answered_setup and not pressed_return and not prompt:
+            with contextlib.suppress(PTBridgeError):
+                call_pt(
+                    "configure",
+                    {
+                        "device": device,
+                        "lines": [""],
+                        "mode": "raw",
+                        "stop_on_error": False,
+                    },
+                )
+            pressed_return = True
+            if time.monotonic() < deadline:
+                time.sleep(READY_POLL_INTERVAL)
             continue
 
         if not state.get("booting") and state.get("mode") in _READY_MODES:

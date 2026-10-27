@@ -46,12 +46,16 @@ class FakeBridge:
         self.states = list(states)
         self.ops: list[tuple[str, dict]] = []
         self.execs: list[str] = []
+        self.presses: list[list[str]] = []
 
     def __call__(self, op: str, args: dict | None = None, timeout: float | None = None):
         self.ops.append((op, args or {}))
         if op == "exec":
             self.execs.append(str((args or {}).get("command")))
             return {"ok": True, "prompt": "R1>", "lines": []}
+        if op == "configure":
+            self.presses.append(list((args or {}).get("lines") or []))
+            return {"ok": True, "prompt": "Router>", "lines": []}
         if op != "get_state":
             raise AssertionError(f"unexpected op in readiness test: {op}")
         if len(self.states) > 1:
@@ -155,6 +159,26 @@ def test_wait_ready_answers_the_initial_configuration_dialog(
     assert state["mode"] == "user"
     assert fake.execs == ["no"], "exactly one answer, not a loop of 'no'"
     assert [op for op, _ in fake.ops] == ["get_state", "exec", "get_state"]
+
+
+def test_wait_ready_presses_return_after_the_setup_dialog(
+    monkeypatch: pytest.MonkeyPatch, clock: FakeClock
+) -> None:
+    """After ``no`` IOS shows no prompt until RETURN; one empty line is sent."""
+    fake = FakeBridge(
+        [
+            setup_dialog(),
+            {"prompt": "", "mode": "unknown", "booting": False},
+            ready("Router>", "user"),
+        ]
+    )
+    monkeypatch.setattr(server, "call_pt", fake)
+
+    state = server.wait_ready("R1", timeout=10.0)
+
+    assert state["prompt"] == "Router>"
+    assert fake.execs == ["no"]
+    assert fake.presses == [[""]], "exactly one RETURN, as an empty raw line"
 
 
 def test_wait_ready_reports_a_stuck_setup_dialog(

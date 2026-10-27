@@ -76,9 +76,9 @@ must be updated too**: replace the Script Engine file with the new
   input`) is prevented by waiting for the prompt before sending.
 - **Initial-configuration dialog.** A fresh IOS router that parks at
   `Would you like to enter the initial configuration dialog? [yes/no]:` is now
-  answered once with `no` by `wait_ready`, instead of waiting 45 s and failing;
-  if the dialog does not accept it, the error names it and suggests *Skip boot*
-  or a power-cycle.
+  answered once with `no` **and one RETURN** (`Press RETURN to get started!`) by
+  `wait_ready`, instead of waiting 45 s and failing; if the dialog does not
+  accept it, the error names it and suggests *Skip boot* or a power-cycle.
 - **PTM-16 — no more guessing the name convention** for links, and a mode bug can
   be caught with `dry_run` before it costs a console.
 
