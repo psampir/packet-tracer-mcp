@@ -185,3 +185,9 @@ pt_configure("PC-Users", ["ping 192.168.20.10"], dry_run=True)
 No `enable`, no `configure terminal`, no `end` — the three lines that used to
 produce `Invalid Command.` ahead of the actual ping (and, on a switch in exec
 mode, a DNS lookup that locked the console).
+
+A PC does not need the CLI to be *configured* either: addressing, DNS records and
+HTTP pages go through the PT API with `pt_set_ip`, `pt_set_ipv6`,
+`pt_dns_record` and `pt_http_page`, and `pt_pc_command`/`pt_ping` exist only for
+what the host itself must print (`ipconfig`, `ping`, `tracert`). Nothing on that
+path adds a wrapper line, so it cannot introduce `Invalid Command.` at all.

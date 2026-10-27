@@ -95,7 +95,7 @@ and needs no credential — only the PT privileges you granted the module (see
 | Layer | Lives in | Responsibility |
 |---|---|---|
 | **MCP client (agent)** | opencode / Claude / any stdio client | Turns user intent into tool calls; never sees a file path. |
-| **`pt_mcp.server`** | `src/pt_mcp/server.py` | Eleven MCP tools over stdio; splits input, waits for a usable prompt, renders every failure as `{"ok": false, "error": …}`. |
+| **`pt_mcp.server`** | `src/pt_mcp/server.py` | Twenty-two MCP tools over stdio; splits input, waits for a usable prompt, generates the host/topology JS that rides the `eval` op, renders every failure as `{"ok": false, "error": …}`. |
 | **Transport** | `src/pt_mcp/protocol.py`, `src/pt_mcp/config.py` | Atomic job write, 50 ms polling, stale-id detection, cleanup on success and on timeout. |
 | **Mailbox** | `$PT_MCP_HOME/{jobs,results,saved}` | The only shared state. Defaults to `~/.local/share/pt-mcp`. |
 | **`bridge/bridge.js`** | inside Packet Tracer (Script Module `com.psampir.ptmcp`) | File watcher + job dedupe + op dispatch; the only code that touches the PT API. |
@@ -218,6 +218,36 @@ skipped silently.
 so the bridge writes the result in one call and the server tolerates a partial
 read by retrying the JSON parse every 50 ms instead of failing.
 
+### Host and topology tools: server-side, over `eval`
+
+The console tools delegate to bridge ops, but the API tools do not need one. Each
+of `pt_get_config`, `pt_set_ip`, `pt_set_ipv6`, `pt_dns_record`, `pt_dns_list`,
+`pt_http_page`, `pt_pc_command`, `pt_ping`, `pt_list_links` and `pt_list_ports`
+generates a small ES5 snippet, tags it with `/* pt-mcp: <tool> */`, and sends it
+through the **existing** `eval` op:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as Agent
+    participant S as pt_mcp.server
+    participant B as bridge.js (eval op)
+    participant P as PT API
+    A->>S: pt_set_ip("PC-Users", ip=…, mask=…)
+    S->>S: build ES5: find device, getPort, setIpSubnetMask(ip, mask)
+    S->>B: {op: "eval", args: {js: "/* pt-mcp: pt_set_ip */…"}}
+    B->>P: eval(js) → Port.setIpSubnetMask / getIpAddress
+    P-->>B: return value
+    B-->>S: {value: "<json of the value>"}
+    S->>S: parse twice, unwrap, add context to errors
+    S-->>A: {"port": …, "ip": …, "mask": …, "dhcp": …}
+```
+
+This is what keeps `bridge.js` stable: a new capability on the API costs a Python
+change and no Script Module re-paste. The trade-off is that the JS runs inside the
+engine with the module's privileges, exactly like `pt_raw` — read the
+[security model](#security-model).
+
 ## Wire protocol (summary)
 
 Full detail — every op, every argument, every result shape — is in
@@ -332,7 +362,16 @@ it is ordered by how often each one is the answer.
 
 ## Extending it
 
-Adding an op means changing exactly three places, in this order:
+Two routes, depending on what the capability needs:
+
+**A server-side helper** (preferred for the PT API: hosts, ports, DNS, HTTP,
+topology) is one new function in `src/pt_mcp/server.py` that builds its ES5 with
+`string.Template`, calls `_eval(js, device, op)`, and is wrapped with `_tool(...)`
+for JSON-safe errors. No bridge change, no re-paste. Add the tool to the README
+table and a test that asserts both the generated JS and the unwrapped value.
+
+**A new bridge op** is needed only when the console or the workspace itself must
+change. That means changing exactly three places, in this order:
 
 1. `dispatch()` in [`bridge/bridge.js`](../bridge/bridge.js) — the PT-side
    implementation, ES5 only;
@@ -343,5 +382,6 @@ Adding an op means changing exactly three places, in this order:
 
 The transport does not change: any op is one `{"id","op","args"}` in and one
 `{"id","ok","result"|"error"}` out. `bridge.js` is copied into PT by hand, so a
-change there is a stop/start of the Script Module — which is why the tool surface
-is kept small and `pt_raw` exists for everything else.
+change there is a stop/start of the Script Module — which is why the API surface
+(hosts, ports, DNS, HTTP, topology) is reached through `eval` instead, and why
+`pt_raw` still exists as the last resort.

@@ -47,7 +47,7 @@ the lab you want to drive in front.
 
 > The 0.2.0 bridge adds the per-device mode/readiness logic (`get_state`, `plan`,
 > `configure`, `exec`), so **the old copy in PT must be replaced** — see
-> [§6](#6-updating-the-bridge-later). The rules it implements are in
+> [§7](#7-updating-the-bridge-later). The rules it implements are in
 > [cli-semantics.md](cli-semantics.md).
 
 ### Security Privileges tab
@@ -111,7 +111,54 @@ Fix, in this order:
    `/home/pawel/.local/share/pt-mcp`). A mismatch means the two sides watch
    different directories and *every* call times out.
 
-## 6. Updating the bridge later
+## 6. Recovery: a wedged console
+
+A console can stop accepting input without Packet Tracer crashing: the prompt
+never comes back after a command, two calls arrive out of order, or a mistyped
+command starts a DNS lookup that blocks the line. The bridge has no wall-clock
+timer, so it cannot break such a state on its own — the way out is one of the
+actions below, **in this order**. Each step is cheaper and less destructive than
+the next one.
+
+1. **Wait for the prompt.** Most "hangs" are a slow device. Give it the full
+   `ready_timeout` (default 45 s) and retry the call once; a 2911 in its
+   initial-configuration dialog, a switch still booting and a busy `ping` all
+   look identical from the outside.
+   ```jsonc
+   pt_show("S1", "show vlan brief", ready_timeout=60)
+   ```
+2. **Power-cycle the device** — off, then on and wait:
+   ```jsonc
+   pt_power("S1", on=False)
+   pt_power("S1", on=True, ready=True, ready_timeout=90)
+   ```
+   `ready=True` polls `get_state` until a real prompt appears, so the next call
+   is not typed into a boot sequence.
+3. **Skip the boot** if the device sits in its boot/dialog phase instead of
+   power-cycling it again:
+   ```jsonc
+   pt_skip_boot("S1")                    # or pt_skip_boot("S1", wait=True)
+   ```
+4. **Restart Packet Tracer itself** (close the app, reopen the `.pkt`, make sure
+   the Script Module is *Started*) when the console is fine but *no* op answers
+   — that is a bridge/watcher problem, not a device problem. Check
+   [§5](#5-forcing-a-rescan-watcher-not-firing) first: **Run File** is usually
+   enough.
+5. **Re-paste `bridge.js`** only if the module answers but behaves like an older
+   version — see [§7](#7-updating-the-bridge-later).
+
+> **A power-cycle discards everything that is not saved in the `.pkt`.** The
+> running config of that device (interfaces, VLANs, routing, DHCP pools, DNS
+> entries, pages) is gone after step 2 — `pt_save` first if you have anything to
+> keep, and re-apply the device's configuration afterwards. Per-device config is
+> not part of the bridge's state; there is no undo.
+
+Power-cycling does **not** fix: a wrong device name (`device not found`), a
+missing `DnsServer`/`HttpServer` process (only some device types run them), a
+bridge that never started, or a `PT_MCP_HOME` mismatch between PT and the server.
+Those are configuration problems — the error message says which one.
+
+## 7. Updating the bridge later
 
 `bridge/bridge.js` is the single source of truth, and PT holds a **copy** of it:
 
@@ -131,7 +178,7 @@ The CLI/mode rules the new file implements are documented in
 [cli-semantics.md](cli-semantics.md) — worth a skim before the first
 `pt_configure` after an update.
 
-## 7. Uninstalling
+## 8. Uninstalling
 
 1. *Configure PT Script Modules…* → select `com.psampir.ptmcp` → **Stop**, then
    **Delete**.

@@ -9,7 +9,7 @@ All notable changes to this project are documented here. The format follows
 Prompt-aware CLI modes, device readiness and dry runs. **The Packet Tracer side
 must be updated too**: replace the Script Engine file with the new
 `bridge/bridge.js` and Stop → Start the module (see
-[docs/setup.md §6](docs/setup.md#6-updating-the-bridge-later)).
+[docs/setup.md §7](docs/setup.md#7-updating-the-bridge-later)).
 
 ### Added
 
@@ -43,6 +43,69 @@ must be updated too**: replace the Script Engine file with the new
 - **PTM-01/02/06/16 test coverage**: `tests/test_ready.py` (readiness retry,
   timeout message, `pt_power(ready=True)`), rewritten `tests/test_commands.py`
   and a new `tests/bridge/cli.test.js`.
+- **Host configuration tools, all server-side over the existing `eval` op
+  (PTM-03/04) — no bridge change, no Script Module re-paste.** Each generates an
+  ES5 snippet tagged `/* pt-mcp: <tool> */` and unwraps the double-encoded
+  `value`:
+  - `pt_get_config(device, port=None)` → `{"ports": [{name, ip, mask, dhcp,
+    ipv6, up}]}`;
+  - `pt_set_ip(device, port="FastEthernet0", ip, mask, gateway, dns,
+    dhcp=False)` → static `setIpSubnetMask(ip, mask)` (address first), or
+    `setDhcpClientFlag(true)` + `DhcpClient.dhcpRun(port)`; returns the read-back
+    `{ip, mask, dhcp}`;
+  - `pt_set_ipv6(device, port, address, prefix=64, gateway=None)` →
+    `setIpv6Enabled(true)` + `addIpv6Address(addr, prefix, 0, false)` +
+    optional `setv6DefaultGateway`;
+  - `pt_dns_record(device, name, ip, enable=True, zone, ns_name, soa=True,
+    ns=True, mailbox, min_ttl, refresh, retry, expiry)` → **both**
+    `addIpAddress` and `addARecordToNameServerDb` in one call, plus the zone's
+    SOA and NS, so the answer is neither NXDOMAIN nor non-authoritative;
+    `enable=False` removes both halves; a two-label name is its own zone, a
+    longer one drops the first label;
+  - `pt_dns_list(device, name=None)`, `pt_http_page(device, path, content,
+    enable)`;
+  - `pt_pc_command(device, command, wait=10)` returns the *whole* new console
+    tail (buffer length taken before the command, read again after `wait`), and
+    `pt_ping(src, dst, count=4, wait=10)` parses replies, timeouts, unreachable
+    answers and PT's `Sent/Received/Lost … % loss` line (`count` is advisory:
+    PT's PC ping always sends four).
+- **Topology introspection (PTM-12).** `pt_list_links()` walks
+  `Port.getLink()` → `Cable.getPort1/getPort2` and returns
+  `[{a, a_port, b, b_port, cable, up}]`, deduped in JS *and* in Python so a cable
+  is one entry whichever end was walked first; `pt_list_ports(device)` returns
+  `[{name, up, protocol_up, ip, mask, link}]` with the peer of a connected port.
+- **`pt_skip_boot(device, wait=False, ready_timeout=45)` (PTM-08)** exposes the
+  bridge's existing `skip_boot` op, and `pt_add_device(..., skip_boot=True)` does
+  add + skip in one call.
+- **`pt_raw(js, max_chars=20000)` hardened (PTM-15).** The script is wrapped in
+  try/catch, so a thrown error returns the message and the JS line number as
+  `PT API error: … at line N` instead of a C++ exception; a serialisable result
+  comes back as a **real JSON value** (no second parse on the client); results
+  longer than `max_chars` are cut with `"truncated": true` and `chars`.
+- **Discoverability for bad names (PTM-09/10).** The server validates
+  `pt_add_device(type=…)` against the `DeviceType` table and `pt_link(cable=…)`
+  against the cable table *before* the call: names are accepted with or without
+  the leading `e` and case-insensitively, and an unknown one returns
+  `unknown device type 'X'; valid: …` plus a `difflib` "Did you mean eRouter?"
+  hint. Nothing invalid is passed through to Packet Tracer.
+- **[docs/screenshot.md](docs/screenshot.md) (PTM-13)**: the working Linux/Wayland
+  recipe — find the PT window with `niri msg -j windows`, focus it, capture with
+  `grim` (fullscreen-output trick or `slurp` region), crop with ImageMagick or
+  Pillow — plus what to shoot for a lab report and the manual/`browser.preview`
+  fallbacks. PT 9.0.1 exposes no render-to-image API, so `pt_export_png` stays
+  unimplemented by design.
+- **Recovery section in [docs/setup.md §6](docs/setup.md#6-recovery-a-wedged-console)
+  (PTM-07)**: the ordered way out of a wedged console — wait for the prompt →
+  `pt_power(off)` + `pt_power(on, ready=True)` → `pt_skip_boot` → restart PT →
+  re-paste the bridge — with the warning that a power cycle discards everything
+  not saved in the `.pkt`. Linked from the README troubleshooting table.
+- **`tests/test_hosts.py`**: 100+ cases for the new tools (static and DHCP
+  addressing, IPv6, both DNS A calls plus SOA/NS and the removal path, DNS
+  listing, HTTP pages, the PC command buffer, ping parsing incl. unreachable,
+  link dedupe, port inventory, `pt_raw` value/truncation/error+line,
+  device-type and cable suggestions), plus end-to-end runs through
+  `tests/fake_bridge.py`, whose `eval` now answers the marker-tagged snippets.
+  The suite is 197 Python tests; coverage stays at 100%.
 
 ### Changed
 
@@ -57,6 +120,11 @@ must be updated too**: replace the Script Engine file with the new
 - **`pt_configure` signature**: `mode="auto"`, `keep_session=False`,
   `stop_on_error=True`, `dry_run=False`, `ready_timeout=45`; `pt_show` gained
   `ready_timeout`; `pt_power` gained `ready`/`ready_timeout`.
+- **Twenty-two tools, not eleven.** The README table, `docs/protocol.md` (a new
+  "Server-side helpers over `eval`" section and the `skip_boot`/`eval` rows) and
+  `docs/architecture.md` (the host/topology sequence diagram and the two ways to
+  extend the server) describe the new surface; `docs/cli-semantics.md` notes that
+  hosts are configured through the API tools, not through the CLI.
 - **Architecture, protocol and setup docs** describe the new ops, the wait and
   the Script Module update procedure; README tool table updated.
 - Version bumped to `0.2.0` (`pyproject.toml`, `pt_mcp.__version__`, `uv.lock`).
@@ -81,6 +149,17 @@ must be updated too**: replace the Script Engine file with the new
   accept it, the error names it and suggests *Skip boot* or a power-cycle.
 - **PTM-16 — no more guessing the name convention** for links, and a mode bug can
   be caught with `dry_run` before it costs a console.
+- **PTM-03 — a whole lab no longer needs `pt_raw`.** Server addressing, DHCP,
+  DNS records, HTTP pages and connectivity tests are first-class tools.
+- **PTM-04 — DNS answers instead of NXDOMAIN.** `pt_dns_record` always writes the
+  name-server DB record together with the address, and adds SOA/NS so the reply
+  is authoritative.
+- **PTM-09/10 — errors that name the alternative** for `type` and `cable`,
+  instead of a bare "unknown device type".
+- **PTM-11 — PT API failures are labelled.** Every `eval`-based tool raises
+  `PT API error: … (op=…, device=…)`, never a raw engine exception.
+- **PTM-15 — `pt_raw` is usable in anger**: a JSON value instead of a string, a
+  line number on failure, and a size cap.
 
 ### Previously unreleased (now part of 0.2.0)
 

@@ -81,9 +81,9 @@ tool renders that as `{"ok": false, "error": "Packet Tracer bridge error for op
 | `exec` | `{device, command, timeout_ms}` | same shape as `configure`, `effective_mode: "exec"` | `pt_show` |
 | `show` | `{device, command}` | alias of `exec`, kept for older clients | — |
 | `power` | `{device, on: bool}` | `{"ok": true}` | `pt_power` |
-| `skip_boot` | `{device}` | `{"ok": true}` | — (bridge-level; reachable via `pt_raw`) |
+| `skip_boot` | `{device}` | `{"ok": true}` | `pt_skip_boot`, `pt_add_device(skip_boot=True)` |
 | `save` | `{path}` | `{"saved": true, "path": "…"}` | `pt_save` |
-| `eval` | `{js}` | `{"value": "<stringified>"}` | `pt_raw` |
+| `eval` | `{js}` | `{"value": "<stringified>"}` | `pt_raw` and every host/topology tool (server-side, see below) |
 
 `mode` in `plan`/`configure` is `auto` (default), `raw`, `exec` or `config`; the
 bridge resolves it against the device's prompt and reports the outcome as
@@ -95,9 +95,47 @@ delta only; `stopped_on` is `{index, line, prompt, reason, output}` with a
 
 `type` in `add_device` accepts a `DeviceType` name (`"eRouter"`, `"eSwitch"`,
 `"ePc"`, …) or the integer value (0 = router) and is resolved inside the bridge.
-`cable` in `link` accepts a friendly name (`"copper"`, `"crossover"`, `"fiber"`,
-`"serial"`, `"console"`, `"wireless"`, `"coax"`, `"auto"`) or a raw
-`CONNECT_TYPES` integer; friendly names are mapped in the bridge.
+The **server** validates it first, too: an unknown name never reaches PT, and the
+error lists every valid value plus a closest match (PTM-09). `cable` in `link` is
+the same story for `"eCopperEthernet"`, `"eCopperGigabitEthernet"`,
+`"eFiberGigabitEthernet"`, `"straight"`, `"crossover"`, `"fiber"`, `"serial"`,
+`"console"`, `"wireless"`, `"coax"`, `"auto"` or a raw `CONNECT_TYPES` integer
+(PTM-10).
+
+## Server-side helpers over `eval`
+
+The host and topology tools need the PT API, not the console, and adding a bridge
+op for each of them would mean re-pasting `bridge.js` into Packet Tracer every
+time. Instead they are generated **server-side** and shipped through the `eval`
+op that has always existed:
+
+| Tool | PT API it touches |
+|---|---|
+| `pt_get_config` | `Port.getIpAddress/getSubnetMask/isDhcpClientOn/getIpv6Addresses/isPortUp` |
+| `pt_set_ip` | `Port.setIpSubnetMask(ip, mask)` (**ip first**), `setDefaultGateway`, `setDnsServerIp`, `setDhcpClientFlag`, `Device.getProcess("DhcpClient").dhcpRun(port)` |
+| `pt_set_ipv6` | `Port.setIpv6Enabled(true)`, `addIpv6Address(addr, prefix, 0, false)`, `setv6DefaultGateway` |
+| `pt_dns_record` / `pt_dns_list` | `Device.getProcess("DnsServer")`: `addIpAddress` **and** `addARecordToNameServerDb`, `addSOAToNameServerDb`, `addNSRecordToNameServerDb`, `removeIpAddress`, `removeARecordFromNameServerDb`, `getEntryCount/getEntryAt/getIpAddOfDomain` |
+| `pt_http_page` | `Device.getProcess("HttpServer")`: `setEnable`, `isEnabled`, `setPageContents`, `getPage` |
+| `pt_pc_command` / `pt_ping` | `Device.getCommandLine().getOutput()` plus the `exec` op for the keystrokes |
+| `pt_list_links` | `Port.getLink()` → `Cable.getPort1/getPort2/getConnectionType`, `Port.isPortUp` |
+| `pt_list_ports` | `Device.getPortCount/getPortAt`, `Port.getName/isPortUp/isProtocolUp/getLink` |
+
+Each snippet starts with a `/* pt-mcp: <tool> */` comment and returns JSON, so the
+`value` of the `eval` result carries one more JSON layer; the server parses it
+twice while it is still a string. A thrown error comes back as the op's `error`,
+which becomes `PT API error: <message> (op=<tool>, device=<device>)`.
+
+Consequences for the wire format:
+
+- **no new ops** — the installed Script Module keeps working, and every one of
+  these tools works against an older `bridge.js`;
+- the PT-side cost is one `eval` op per call (two for `pt_pc_command`);
+- `pt_raw` is still the escape hatch, but it no longer has to be the *only* way to
+  reach the API (PTM-03).
+
+Because `eval` is arbitrary JS, the server does not restrict what a snippet may
+do — only the installed script's Security Privileges and PT's own API do. Read
+[architecture.md](architecture.md#security-model) before widening them.
 
 ## Lifecycle and cleanup
 
