@@ -14,7 +14,7 @@ keywords = ["packet-tracer", "cisco", "networking", "mcp", "llm-tools"]
 dependencies = ["mcp>=2.3"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.6"]
+dev = ["pytest>=8.0", "pytest-cov>=5", "ruff>=0.6"]
 
 [project.scripts]
 packet-tracer-mcp = "pt_mcp.server:main"
@@ -25,6 +25,16 @@ packages = ["src/pt_mcp"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+# Coverage gate: the suite must keep pt_mcp at >= 85% line coverage. CI enforces
+# the same number through --cov-fail-under, so a local run and CI agree.
+[tool.coverage.run]
+source = ["pt_mcp"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+skip_covered = true
 
 [tool.ruff]
 line-length = 100

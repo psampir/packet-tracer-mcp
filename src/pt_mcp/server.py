@@ -199,4 +199,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # Only runs as `python -m pt_mcp.server`: the console script and the tests go
+    # through the imported main(), which tests/test_protocol.py covers.
+    main()  # pragma: no cover - true script entry point

@@ -262,3 +262,97 @@ def test_stale_result_is_ignored(dead_home: Path) -> None:
     with pytest.raises(PTBridgeError):
         call_pt("ping", timeout=0.3)
     assert time.monotonic() - started >= 0.3
+
+
+# --------------------------------------------------------------------------
+# retry paths: a result that is not ours (yet)
+# --------------------------------------------------------------------------
+#: The job id every call_pt() in these tests is forced to use.
+_FIXED_ID = "0123456789ab"
+
+
+def _pin_job_id(monkeypatch: pytest.MonkeyPatch) -> str:
+    """Freeze ``uuid4()`` so a test can pre-write the response for our job id."""
+
+    class _Id:
+        hex = _FIXED_ID
+
+    monkeypatch.setattr(protocol.uuid, "uuid4", lambda: _Id())
+    return _FIXED_ID
+
+
+def test_missing_base_raises_before_writing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No mailbox directory means the module never ran: fail fast, create nothing."""
+    missing = tmp_path / "never-created"
+    monkeypatch.setattr(config, "BASE", missing)
+
+    with pytest.raises(PTBridgeError) as excinfo:
+        call_pt("ping", timeout=0.2)
+
+    assert "never set up" in str(excinfo.value)
+    assert not missing.exists(), "call_pt must not create the home directory"
+
+
+def test_partially_written_result_is_retried(
+    dead_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A half-written result file must not be parsed as the answer."""
+    job_id = _pin_job_id(monkeypatch)
+    results = dead_home / "results"
+    results.mkdir(parents=True, exist_ok=True)
+    (results / f"{job_id}.json").write_text('{"id": "' + job_id, encoding="utf-8")
+
+    with pytest.raises(PTBridgeError) as excinfo:
+        call_pt("ping", timeout=0.3)
+
+    assert "Timed out" in str(excinfo.value)
+    assert list((dead_home / "jobs").glob("*.json")) == [], "timed-out job is dropped"
+
+
+def test_result_for_another_id_is_retried(dead_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A result carrying someone else's id is discarded and the wait continues."""
+    job_id = _pin_job_id(monkeypatch)
+    results = dead_home / "results"
+    results.mkdir(parents=True, exist_ok=True)
+    (results / f"{job_id}.json").write_text(
+        json.dumps({"id": "someone-else", "ok": True, "result": {"version": "wrong"}}),
+        encoding="utf-8",
+    )
+
+    started = time.monotonic()
+    with pytest.raises(PTBridgeError):
+        call_pt("ping", timeout=0.3)
+
+    assert time.monotonic() - started >= 0.3
+    assert not (results / f"{job_id}.json").exists(), "the mismatched response was consumed"
+
+
+def test_mismatched_result_at_the_deadline_times_out(
+    dead_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no time left, a mismatched id breaks out instead of restoring the wait."""
+    job_id = _pin_job_id(monkeypatch)
+    results = dead_home / "results"
+    results.mkdir(parents=True, exist_ok=True)
+    (results / f"{job_id}.json").write_text(
+        json.dumps({"id": "someone-else", "ok": True, "result": {}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(PTBridgeError, match="Timed out"):
+        call_pt("ping", timeout=0)
+
+
+# --------------------------------------------------------------------------
+# entry point
+# --------------------------------------------------------------------------
+def test_main_runs_the_stdio_server(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``main()`` is stdio-only: it must hand exactly that transport to the SDK."""
+    transports: list[str] = []
+    monkeypatch.setattr(server.server, "run", transports.append)
+
+    server.main()
+
+    assert transports == ["stdio"]

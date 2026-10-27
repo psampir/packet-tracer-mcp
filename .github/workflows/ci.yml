@@ -45,5 +45,12 @@ jobs:
       - name: Lint
         run: uv run ruff check .
 
-      - name: Test
-        run: uv run pytest -q
+      - name: Test the PT bridge (Node)
+        # bridge/bridge.js runs inside Packet Tracer's ES5 engine and is loaded
+        # unmodified by tests/bridge/harness.js; node:test needs no dependencies.
+        run: node --test tests/bridge/*.test.js
+
+      - name: Test (+ coverage gate)
+        # 85% is enforced twice: fail_under in pyproject.toml (local runs) and
+        # --cov-fail-under here, so CI cannot drift from the documented gate.
+        run: uv run pytest -q --cov=pt_mcp --cov-report=term-missing --cov-fail-under=85

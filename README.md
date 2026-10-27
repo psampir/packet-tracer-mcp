@@ -143,10 +143,25 @@ A typical session: `pt_status` → `pt_add_device` × n → `pt_link` → `pt_co
 ```sh
 cd /home/pawel/Code/Projects/packet-tracer-mcp
 uv sync --extra dev
-uv run pytest        # 44 tests, all offline, driven by tests/fake_bridge.py
-uv run ruff check .  # lint
-node --check bridge/bridge.js   # ES5 bridge must stay parseable
+uv run pytest                                        # 52 Python tests, all offline
+uv run pytest --cov=pt_mcp --cov-report=term-missing  # same run, 85% coverage gate
+node --test tests/bridge/*.test.js                   # 41 Node tests against the real bridge.js
+uv run ruff check .                                  # lint
+node --check bridge/bridge.js                        # ES5 bridge must stay parseable
 ```
+
+The Python suite is driven by `tests/fake_bridge.py`, which answers on disk exactly
+like `bridge/bridge.js` does; the Node suite is the other half of the contract —
+`tests/bridge/harness.js` loads the **unmodified** `bridge/bridge.js` into a `node:vm`
+context with a fake `ipc`, mock devices and an in-memory `SystemFileManager`, so
+dispatch, the job/result file dance, the dedupe guard and the watcher path are all
+exercised without Packet Tracer. Only Node built-ins are used (`node:test`,
+`node:assert`, `node:vm`) — there are no npm dependencies to install.
+
+CI ([`ci.yml`](.github/workflows/ci.yml)) runs all three: `ruff check .`, the Node
+suite and `pytest` under an **85% line-coverage gate** on `pt_mcp`
+(`[tool.coverage.report] fail_under` plus `--cov-fail-under` in the workflow). Lower
+the coverage only by adding tests, not by moving the threshold.
 
 Layout:
 
@@ -157,7 +172,8 @@ Layout:
 | `src/pt_mcp/commands.py` | `normalize_commands()` for `pt_configure` |
 | `src/pt_mcp/server.py` | the eleven MCP tools and `main()` |
 | `bridge/bridge.js` | the ES5 script that runs **inside** Packet Tracer |
-| `tests/fake_bridge.py` | protocol-compatible stand-in bridge for the suite |
+| `tests/fake_bridge.py` | protocol-compatible stand-in bridge for the Python suite |
+| `tests/bridge/` | Node harness + tests that load the real `bridge.js` into `node:vm` |
 | `docs/` | [architecture](docs/architecture.md), [setup](docs/setup.md), [protocol](docs/protocol.md) |
 
 `bridge/bridge.js` is deliberately frozen ES5 (QtScript: `var`/`function` only, no `let`, arrows,

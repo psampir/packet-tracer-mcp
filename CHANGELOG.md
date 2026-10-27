@@ -17,11 +17,28 @@ All notable changes to this project are documented here. The format follows
 - **Tag-driven release workflow** (`.github/workflows/release.yml`): a `v*` tag verifies that the tag
   equals `project.version` in `pyproject.toml`, runs ruff + pytest, then `uv build` and publishes the
   wheel and sdist to a GitHub Release with generated notes.
+- **Node test harness for the PT-side bridge** (`tests/bridge/`): `harness.js` loads
+  `bridge/bridge.js` **unmodified** into a `node:vm` context and fakes the host it runs against inside
+  Packet Tracer — `ipc.appWindow()`/`network()`/`systemFileManager()` (an in-memory directory + file
+  map), mock devices whose `ConsoleLine` has `getOutput()` and whose `TerminalLine` deliberately does
+  not, and a recording file watcher. 41 `node:test` cases cover the pure helpers (`resolveDeviceType`,
+  `resolveCable`, `baseName`, `tail`, `safeId`, `safeStringify`), every dispatch op, the
+  job → result file transport (dedupe via `PT_MCP_SEEN`, invalid JSON, unknown device, several jobs per
+  scan, the `writePlainTextToFile` fallback) and `main()`/watcher startup. Node built-ins only: no npm
+  dependencies and no Packet Tracer needed.
+- **Python coverage gate** (`pytest-cov`): `[tool.coverage.run]`/`[tool.coverage.report]` in
+  `pyproject.toml` with `fail_under = 85`, plus tests for the previously uncovered timeout-parsing and
+  retry paths (partially written result, mismatched id, missing mailbox directory) — 100% line
+  coverage of `pt_mcp`.
 
 ### Changed
 
 - **README**: new *Architecture* and *Releasing* sections pointing at the design doc, the wire
-  protocol, the PT setup guide and the tag/re-tag procedure.
+  protocol, the PT setup guide and the tag/re-tag procedure; the *Development* section now lists the
+  coverage command and the Node suite and points at `tests/bridge/`.
+- **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) now runs the Node bridge suite after
+  lint and pytest under an 85% coverage gate (`--cov=pt_mcp --cov-fail-under=85`), and `uv.lock` is
+  refreshed for `pytest-cov` so `uv sync --frozen` keeps working.
 
 ## [0.1.0] - 2026-10-27
 
