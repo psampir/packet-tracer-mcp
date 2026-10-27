@@ -1,0 +1,152 @@
+# packet-tracer-mcp
+
+An [MCP](https://modelcontextprotocol.io) server that lets an AI agent **build and configure a live
+Cisco Packet Tracer topology** — add devices, cable them, push IOS CLI, read `show` output — through
+Packet Tracer's own Script Module API, with no network port and no PT plugin to compile.
+
+[![CI](https://github.com/psampir/packet-tracer-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/psampir/packet-tracer-mcp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+> **Unofficial.** Not affiliated with or endorsed by Cisco. It drives *your own* Packet Tracer
+> install through the documented Scripting/Extensions API and ships no Cisco code —
+> see [THIRD_PARTY.md](THIRD_PARTY.md).
+
+## What it does
+
+Packet Tracer runs an in-process JavaScript engine for *Script Modules*, but it has no socket an
+outside program could connect to. This project bridges that gap with files: the MCP server writes a
+JSON job into a directory, a small ES5 script running **inside** PT (`bridge/bridge.js`) performs the
+op with the `ipc.*` API and writes the answer back. The agent talks MCP over stdio and never has to
+know any of that.
+
+```
+  agent (opencode, Claude, …)
+        │  MCP over stdio (JSON-RPC)
+        ▼
+  packet-tracer-mcp  ──write──▶  ~/.local/share/pt-mcp/jobs/<id>.json
+        ▲                                            │  file watcher
+        │                                            ▼
+        └─────read─────  ~/.local/share/pt-mcp/results/<id>.json  ◀── bridge.js
+                                                                  (inside PT)
+```
+
+Consequences worth knowing up front:
+
+- **No networking at all** — no TCP port, no firewall rule, no auth token. The two sides share a
+  directory (`PT_MCP_HOME`, default `~/.local/share/pt-mcp`).
+- **The bridge acts on the active `.pkt` only.** Start PT, open the lab you want, then talk to it.
+- **Latency is one poll** (50 ms) plus whatever the device takes; every call is a round trip you can
+  inspect with `ls` and `cat`.
+- **Offline-testable** — `tests/fake_bridge.py` speaks the same protocol, so the suite runs with no
+  Packet Tracer installed.
+
+Details: [docs/protocol.md](docs/protocol.md) for the wire format, [docs/setup.md](docs/setup.md) for
+the PT-side clicks.
+
+## One-time Packet Tracer setup
+
+Do this once per PT install; afterwards the module starts with PT automatically.
+
+1. Packet Tracer 9.0.1 running, with a `.pkt` open (the bridge only sees the **active** file).
+2. **Extensions → Scripting → Configure PT Script Modules… → Add**
+   - **General:** ID `com.pawel.ptmcp`, Name `pt-mcp`, Startup **On Startup**
+   - **Script Engine:** add a file `bridge.js`, paste the whole of
+     [`bridge/bridge.js`](bridge/bridge.js), **Apply**
+   - **Security Privileges:** **Application**, **File Operations**, **Get Network Info**,
+     **Change Network Info** (plus **Miscellaneous UI** if you want `[pt-mcp]` log lines)
+3. **Save**, then select the module and click **Start**.
+4. Check `~/.local/share/pt-mcp/{jobs,results}` exists; PT's log shows
+   `[pt-mcp] bridge ready (home=…)`.
+
+Click-by-click version, including how to force a rescan when the file watcher stays silent:
+**[docs/setup.md](docs/setup.md)**.
+
+## Connect the MCP client
+
+`examples/opencode-snippet.jsonc` holds the block to paste into the `mcp.servers` object of
+`~/.config/opencode/opencode.jsonc` (add it, don't overwrite the file):
+
+```jsonc
+"pt": {
+  "type": "local",
+  "command": ["uv", "run", "--directory", "/home/pawel/Code/Projects/packet-tracer-mcp", "packet-tracer-mcp"],
+  "cwd": "/home/pawel/Code/Projects/packet-tracer-mcp",
+  "disabled": false
+}
+```
+
+`uv run` resolves the locked environment on first use; the command runs the `packet-tracer-mcp`
+console script. Any stdio MCP client works the same way:
+
+```sh
+uv run --directory /home/pawel/Code/Projects/packet-tracer-mcp packet-tracer-mcp
+```
+
+Set `PT_MCP_HOME` if the bridge watches a different directory, and `PT_MCP_TIMEOUT` (default `120`
+seconds) to change the per-call deadline.
+
+## Tools
+
+Eleven tools, all returning JSON strings. Failures never raise into the client: they come back as
+`{"ok": false, "error": "…"}` with an actionable message.
+
+| Tool | Arguments | What it does |
+|---|---|---|
+| `pt_status` | — | Bridge health: PT version + device count of the active file |
+| `pt_list_devices` | — | Every device (name, type, typeName, model) and the link count |
+| `pt_add_device` | `name, type, model, x=100, y=100` | Add a device; `type` is a `DeviceType` name (`eRouter`) or int, `name=""` keeps PT's auto name |
+| `pt_remove_device` | `name` | Remove a device |
+| `pt_link` | `dev_a, port_a, dev_b, port_b, cable="eCopperGigabitEthernet"` | Cable two ports; friendly cable names (`copper`, `crossover`, `fiber`, `serial`, `console`, …) are mapped to `CONNECT_TYPES` |
+| `pt_autolink` | `dev_a, dev_b` | Connect two devices, letting PT choose cable and ports |
+| `pt_configure` | `device, commands` | Send IOS CLI (string or list); blanks/`!` dropped, `enable` + `configure terminal` prepended, `end` appended when missing |
+| `pt_show` | `device, command` | Run one show/exec command and return the output |
+| `pt_power` | `device, on=True` | Power a device on or off |
+| `pt_save` | `path=""` | Save the active `.pkt` (default `~/.local/share/pt-mcp/saved/<ts>.pkt`) |
+| `pt_raw` | `js` | Escape hatch: evaluate JS in the PT engine (`ipc.network().getDeviceCount()`) |
+
+A typical session: `pt_status` → `pt_add_device` × n → `pt_link` → `pt_configure` → `pt_show` →
+`pt_save`.
+
+## Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| `Timed out … Packet Tracer is not responding` | PT not running, no `.pkt` open, or the Script Module stopped. Open a lab, then **Extensions → Scripting → Configure PT Script Modules… → `com.pawel.ptmcp` → Start**. |
+| `bridge was never set up: base dir … does not exist` | The module has never run, so `~/.local/share/pt-mcp` was never created. Start it once (or click **Run File**). |
+| Jobs appear in `jobs/` but nothing answers | The file watcher isn't firing: click **Run File** in the Scripting interface to force a rescan. Also check the `PT_MCP_HOME` constant at the top of `bridge.js` matches the server's. |
+| Privilege / access-denied errors in PT | Re-open the module's **Security Privileges** tab, enable **Application**, **File Operations** and **Get/Change Network Info**, then Stop → Start. |
+| `device not found: X` | The name is wrong, or the device lives in a different (non-active) `.pkt` — the bridge only sees the active window. |
+| Commands return empty output | The device is still booting. Wait, power it on with `pt_power`, or retry. |
+| `pt_link` fails | Port names are case-sensitive (`GigabitEthernet0/0`); try `pt_autolink` to let PT pick compatible ports. |
+| PT was restarted | The module restarts with PT and recreates its directories; just retry the call. |
+
+## Development
+
+```sh
+cd /home/pawel/Code/Projects/packet-tracer-mcp
+uv sync --extra dev
+uv run pytest        # 44 tests, all offline, driven by tests/fake_bridge.py
+uv run ruff check .  # lint
+node --check bridge/bridge.js   # ES5 bridge must stay parseable
+```
+
+Layout:
+
+| Path | Purpose |
+|---|---|
+| `src/pt_mcp/config.py` | paths (`PT_MCP_HOME`), timeout, `saved/` |
+| `src/pt_mcp/protocol.py` | `call_pt()` — atomic job write, poll, cleanup; `PTBridgeError` |
+| `src/pt_mcp/commands.py` | `normalize_commands()` for `pt_configure` |
+| `src/pt_mcp/server.py` | the eleven MCP tools and `main()` |
+| `bridge/bridge.js` | the ES5 script that runs **inside** Packet Tracer |
+| `tests/fake_bridge.py` | protocol-compatible stand-in bridge for the suite |
+| `docs/` | [setup](docs/setup.md) and [protocol](docs/protocol.md) |
+
+`bridge/bridge.js` is deliberately frozen ES5 (QtScript: `var`/`function` only, no `let`, arrows,
+template literals or classes). It is copied into PT by hand, so keep changes minimal and re-paste it
+into the module (Stop → Start) after editing.
+
+## License
+
+MIT — see [LICENSE](LICENSE) (`Copyright (c) 2026 Pawel Sampir`). Third-party notices are in
+[THIRD_PARTY.md](THIRD_PARTY.md); "Cisco" and "Packet Tracer" are trademarks of Cisco Systems, Inc.

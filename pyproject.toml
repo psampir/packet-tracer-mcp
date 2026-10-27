@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "packet-tracer-mcp"
+version = "0.1.0"
+description = "MCP server that lets an AI agent configure Cisco Packet Tracer through its Script Module IPC bridge."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Pawel Sampir" }]
+keywords = ["packet-tracer", "cisco", "networking", "mcp", "llm-tools"]
+dependencies = ["mcp>=2.3"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+packet-tracer-mcp = "pt_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pt_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "B", "UP", "SIM", "C4", "RET", "PT"]
