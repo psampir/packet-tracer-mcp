@@ -214,13 +214,32 @@ Layout:
 template literals or classes). It is copied into PT by hand, so keep changes minimal and re-paste it
 into the module (Stop → Start) after editing.
 
-## Releasing
+## Branches
 
-Publishing is triggered by a tag, never by hand. The version in `pyproject.toml` is the single
-source of truth, and the tag must match it exactly:
+- **`dev`** — integration branch. All work lands here first; CI runs on every push.
+- **`main`** — released code only. Merge `dev` into `main` when a version is complete, then tag.
 
 ```sh
-# bump "version" in pyproject.toml first, then
+# day to day
+git switch dev
+# ... work, commit ...
+git push origin dev
+
+# release time
+git switch main
+git merge --no-ff dev
+git push origin main
+git tag vX.Y.Z && git push origin vX.Y.Z
+```
+
+## Releasing
+
+Publishing is triggered by a tag, never by hand, and only after `dev` has been merged into
+`main`. The version in `pyproject.toml` is the single source of truth, and the tag must match it
+exactly:
+
+```sh
+# bump "version" in pyproject.toml on dev, merge dev -> main, then
 git tag v0.1.0
 git push origin v0.1.0
 ```
