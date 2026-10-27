@@ -40,8 +40,26 @@ Consequences worth knowing up front:
 - **Offline-testable** — `tests/fake_bridge.py` speaks the same protocol, so the suite runs with no
   Packet Tracer installed.
 
-Details: [docs/protocol.md](docs/protocol.md) for the wire format, [docs/setup.md](docs/setup.md) for
-the PT-side clicks.
+## Architecture
+
+Four moving parts, one shared directory:
+
+| Part | Where | Role |
+|---|---|---|
+| MCP client | your agent | calls tools over stdio, never sees a file path |
+| `pt_mcp.server` | this repo (`src/pt_mcp/`) | eleven MCP tools, atomic job write, 50 ms polling, cleanup |
+| mailbox | `$PT_MCP_HOME/{jobs,results,saved}` | the entire transport: one JSON in, one JSON out |
+| `bridge/bridge.js` | inside Packet Tracer | file watcher, op dispatch, `ipc.*` calls, result file |
+
+The PT Script Engine is ES5/QtScript with no sockets and no wall-clock timers, so
+`SystemFileManager` is the only reliable host bridge; that single constraint explains the whole
+design. Jobs are processed serially against the **active** `.pkt`, a timed-out job is deleted
+server-side so it cannot run behind your back, and `pt_raw` is arbitrary JS in the engine — an
+escape hatch, not a daily tool.
+
+Read [docs/architecture.md](docs/architecture.md) for the flowcharts, the `pt_configure` sequence,
+execution semantics, the security/privileges model and a failure-mode table. The wire format is in
+[docs/protocol.md](docs/protocol.md); the one-time PT-side setup in [docs/setup.md](docs/setup.md).
 
 ## One-time Packet Tracer setup
 
@@ -140,11 +158,43 @@ Layout:
 | `src/pt_mcp/server.py` | the eleven MCP tools and `main()` |
 | `bridge/bridge.js` | the ES5 script that runs **inside** Packet Tracer |
 | `tests/fake_bridge.py` | protocol-compatible stand-in bridge for the suite |
-| `docs/` | [setup](docs/setup.md) and [protocol](docs/protocol.md) |
+| `docs/` | [architecture](docs/architecture.md), [setup](docs/setup.md), [protocol](docs/protocol.md) |
 
 `bridge/bridge.js` is deliberately frozen ES5 (QtScript: `var`/`function` only, no `let`, arrows,
 template literals or classes). It is copied into PT by hand, so keep changes minimal and re-paste it
 into the module (Stop → Start) after editing.
+
+## Releasing
+
+Publishing is triggered by a tag, never by hand. The version in `pyproject.toml` is the single
+source of truth, and the tag must match it exactly:
+
+```sh
+# bump "version" in pyproject.toml first, then
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The [`release`](.github/workflows/release.yml) workflow then:
+
+1. **verifies** — strips the leading `v` and fails unless the tag equals `project.version` read
+   from `pyproject.toml`, so a mistyped tag cannot produce a mislabelled artifact;
+2. **tests** — `uv sync --frozen --extra dev`, `uv run ruff check .`, `uv run pytest -q` on the
+   tagged commit;
+3. **builds** — `uv build`, producing `dist/*.whl` and `dist/*.tar.gz`;
+4. **publishes** — creates the GitHub Release for the tag with generated notes and attaches both
+   artifacts (`gh release create`, `GH_TOKEN` = the workflow token).
+
+There is no container image: the release *is* the two Python artifacts. If a run fails after the
+tag was pushed, fix on `main`, then move the tag:
+
+```sh
+git push origin :refs/tags/v0.1.0     # delete the remote tag
+git tag -f v0.1.0 && git push origin v0.1.0
+```
+
+CI ([`ci.yml`](.github/workflows/ci.yml)) runs lint + tests on every push to `main` and every pull
+request, independent of releases.
 
 ## License
 

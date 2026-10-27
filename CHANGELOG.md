@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Architecture doc** ([docs/architecture.md](docs/architecture.md)): why the transport is a
+  directory of JSON files (no sockets, no wall-clock timers in the PT Script Engine, `SystemFileManager`
+  as the only host bridge), the component layout and end-to-end flow as Mermaid diagrams, the
+  `pt_configure` call sequence with its atomic-write/dedupe/mode handling, execution semantics
+  (active `.pkt` only, serial jobs, `Run File` recovery, server-side timeout cleanup), the security
+  and privilege model including `pt_raw` as an escape hatch, and a failure-mode table.
+- **Tag-driven release workflow** (`.github/workflows/release.yml`): a `v*` tag verifies that the tag
+  equals `project.version` in `pyproject.toml`, runs ruff + pytest, then `uv build` and publishes the
+  wheel and sdist to a GitHub Release with generated notes.
+
+### Changed
+
+- **README**: new *Architecture* and *Releasing* sections pointing at the design doc, the wire
+  protocol, the PT setup guide and the tag/re-tag procedure.
+
 ## [0.1.0] - 2026-10-27
 
 ### Added

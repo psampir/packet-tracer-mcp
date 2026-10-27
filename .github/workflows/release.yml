@@ -1,0 +1,133 @@
+name: Release
+
+# Publishing is triggered by a version tag only: `git tag v0.1.0 && git push origin v0.1.0`.
+# The workflow never creates tags itself, and it fails early when the tag and
+# pyproject.toml disagree, so a mistyped tag cannot produce a mislabelled artifact.
+#
+# It lints + tests the tagged commit first, then builds the Python artifacts
+# (wheel + sdist, no container) and attaches them to a GitHub Release with
+# generated notes.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# contents: write → create the GitHub Release and upload its assets.
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  UV_PYTHON: "3.13"
+  UV_NO_PROGRESS: "1"
+  NO_COLOR: "1"
+
+jobs:
+  # ------------------------------------------------------------------------- #
+  # Gate: the tag must match the version being released, and the code must pass
+  # ------------------------------------------------------------------------- #
+  verify:
+    name: verify tag + lint + tests
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: The tag must match project.version in pyproject.toml
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag_version="${TAG#v}"
+          project_version="$(python3 -c 'import tomllib;print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          if [ -z "${tag_version}" ]; then
+            echo "::error title=Bad tag::'${TAG}' must look like vX.Y.Z."
+            exit 1
+          fi
+          if [ "${tag_version}" != "${project_version}" ]; then
+            echo "::error title=Version mismatch::tag '${TAG}' implies version '${tag_version}', but pyproject.toml declares '${project_version}'. Bump project.version or move the tag."
+            exit 1
+          fi
+          echo "Releasing ${project_version} from tag ${TAG}."
+          echo "version=${project_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Install the locked environment
+        # --frozen: fail instead of silently re-resolving uv.lock; --extra dev
+        # brings in pytest and ruff (the locked dev tools).
+        run: uv sync --frozen --extra dev
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Test
+        run: uv run pytest -q
+
+  # ------------------------------------------------------------------------- #
+  # Build the wheel + sdist and publish them as a GitHub Release
+  # ------------------------------------------------------------------------- #
+  build:
+    name: build + release artifacts
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Install the locked environment
+        run: uv sync --frozen --extra dev
+
+      - name: Build the wheel and sdist
+        run: uv build
+
+      - name: Inspect the artifacts
+        run: ls -l dist
+
+      - name: Create the release and attach dist/*
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          # `gh` is preinstalled on GitHub-hosted runners; no action needed.
+          # A re-run on the same tag must not fail just because the release
+          # already exists, so upload with --clobber in that case.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists — replacing its assets."
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* \
+              --verify-tag \
+              --title "$TAG" \
+              --generate-notes
+          fi
+
+      - name: Summarise the release
+        run: |
+          {
+            echo "### Released \`${{ github.ref_name }}\`"
+            echo
+            echo '```'
+            ls -l dist
+            echo '```'
+            echo "Version verified against \`pyproject.toml\`: \`${{ needs.verify.outputs.version }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
