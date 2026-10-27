@@ -1074,6 +1074,27 @@ def _list_ports(device: str) -> list[dict[str, Any]]:
     return ports
 
 
+#: ``getProcess("IP")`` crashes inside PT with ``basic_string::substr: __pos
+#: ...`` instead of naming the typo; a too-short name is always a mistake (PTM-11).
+_PROCESS_HINT = (
+    "DnsServer, HttpServer, DhcpClient, HttpClient, DhcpServer, AaaProcess, "
+    "IcmpProcess, ArpProcess, TcpProcess, UdpProcess, EthernetProcess, "
+    "StpProcess, VtpProcess, IosProcess"
+)
+_PROCESS_CALL_RE = re.compile(r"""getProcess\(\s*(['"])([^'"]+)\1\s*\)""")
+_MIN_PROCESS_NAME = 5
+
+
+def _validate_process_calls(js: str) -> None:
+    """Turn PT's opaque ``substr`` crash into a named error (PTM-11)."""
+    for match in _PROCESS_CALL_RE.finditer(js):
+        name = match.group(2)
+        if len(name) < _MIN_PROCESS_NAME:
+            raise PTBridgeError(
+                f"unknown process '{name}'; known processes include: {_PROCESS_HINT}"
+            )
+
+
 _RAW_PREFIX = (
     "(function(){try{var __v=eval("
 )
@@ -1091,6 +1112,7 @@ def _raw(js: str, max_chars: int) -> dict[str, Any]:
     line number when the engine reports one) instead of a raw C++ exception, and
     a huge result is cut at ``max_chars`` with ``"truncated": true``.
     """
+    _validate_process_calls(js)
     payload = _eval(_RAW_PREFIX + js + _RAW_SUFFIX, None, "pt_raw")
 
     if isinstance(payload, dict) and payload.get("ok") is False:

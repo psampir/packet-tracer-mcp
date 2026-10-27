@@ -940,14 +940,24 @@ def test_pt_raw_wraps_the_script_for_error_reporting(fake) -> None:
 
 
 def test_pt_raw_turns_a_thrown_error_into_a_message(fake, jload) -> None:
-    fake.eval_answers = [{"ok": False, "error": "unknown process 'IP'", "line": 3}]
+    fake.eval_answers = [{"ok": False, "error": "unknown process 'Bogus'", "line": 3}]
 
+    result = jload(server.pt_raw("device.getProcess('Bogus')"))
+
+    assert result["ok"] is False
+    assert result["error"].startswith("PT API error: unknown process 'Bogus'")
+    assert "at line 3" in result["error"]
+    assert "op=pt_raw" in result["error"]
+
+
+def test_pt_raw_rejects_a_too_short_process_name(fake, jload) -> None:
+    """PTM-11: ``getProcess("IP")`` must not reach PT's C++ ``substr`` crash."""
     result = jload(server.pt_raw("device.getProcess('IP')"))
 
     assert result["ok"] is False
-    assert result["error"].startswith("PT API error: unknown process 'IP'")
-    assert "at line 3" in result["error"]
-    assert "op=pt_raw" in result["error"]
+    assert "unknown process 'IP'" in result["error"]
+    assert "DnsServer" in result["error"], "the message lists valid process names"
+    assert not fake.ops, "the invalid snippet never reached Packet Tracer"
 
 
 def test_pt_raw_error_without_a_line_still_works(fake, jload) -> None:
