@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-10-28
+
+### Fixed
+
+- **`pt_dns_record(enable=False)` passes the address to
+  `removeARecordFromNameServerDb(domain, ip)`.** The one-argument call made PT
+  reject the IPC call and took the engine down; removal now mirrors the add
+  path.
+- **IPv6 addresses are formatted.** `pt_get_config` / `pt_set_ipv6` returned
+  `[object Object]`; entries are now rendered as `address/prefix`.
+
 ## [0.2.1] - 2026-10-28
 
 ### Fixed
