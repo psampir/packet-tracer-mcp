@@ -1,9 +1,9 @@
 {
-  // Paste the "pt" block below into ~/.config/opencode/opencode.jsonc
+  // Paste the "packet-tracer" block below into ~/.config/opencode/opencode.jsonc
   // under the existing "mcp" -> "servers" object. Do not duplicate keys.
   // Adjust paths if you moved the project (the command runs the installed
   // console script, so no PEP 723 header is needed any more).
-  "pt": {
+  "packet-tracer": {
     "type": "local",
     "command": [
       "uv",

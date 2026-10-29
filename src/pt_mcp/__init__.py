@@ -1,4 +1,4 @@
-"""pt-mcp — MCP server for Cisco Packet Tracer's Script Module IPC bridge.
+"""packet-tracer-mcp — MCP server for Cisco Packet Tracer's Script Module IPC bridge.
 
 Packet Tracer exposes an in-process JavaScript API (the *Script Module* engine),
 but no socket an outside process could connect to. This package bridges that gap
@@ -12,12 +12,19 @@ Modules:
 
 * :mod:`pt_mcp.config` — paths (``PT_MCP_HOME``), timeout and the saved/ dir.
 * :mod:`pt_mcp.protocol` — the transport: :func:`call_pt`, :class:`PTBridgeError`.
-* :mod:`pt_mcp.commands` — :func:`normalize_commands` for ``pt_configure``.
-* :mod:`pt_mcp.server` — the twenty-two MCP tools and the stdio entry point.
+* :mod:`pt_mcp.commands` — :func:`normalize_commands` for ``configure``.
+* :mod:`pt_mcp.registry` — the one MCP server instance and its instructions.
+* :mod:`pt_mcp.readiness` — :func:`wait_ready`: real waiting for a usable prompt.
+* :mod:`pt_mcp.tables` — device-type and cable names, validated before the call.
+* :mod:`pt_mcp.eval` — the ``eval`` op, its snippet helpers, the ``_tool`` wrapper.
+* :mod:`pt_mcp.snippets` — the ES5 templates the host and topology tools ship.
+* :mod:`pt_mcp.hosts`, :mod:`pt_mcp.topology`, :mod:`pt_mcp.raw` — the tool bodies.
+* :mod:`pt_mcp.tools` — the twenty-two MCP tools, registered at import time.
+* :mod:`pt_mcp.server` — entry point: re-exports them and defines ``main()``.
 """
 
 from __future__ import annotations
 
-__version__ = "0.2.2"
+__version__ = "0.3.0"
 
 __all__ = ["__version__"]
