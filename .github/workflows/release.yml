@@ -101,25 +101,27 @@ jobs:
       - name: Inspect the artifacts
         run: ls -l dist
 
+      - name: Generate release notes from CHANGELOG
+        run: python3 tools/release_notes.py "${{ github.ref_name }}" > "$RUNNER_TEMP/release-notes.md"
+
       - name: Create the release and attach dist/*
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-          VERSION: ${{ needs.verify.outputs.version }}
         run: |
           set -euo pipefail
           # `gh` is preinstalled on GitHub-hosted runners; no action needed.
           # A re-run on the same tag must not fail just because the release
-          # already exists, so upload with --clobber in that case.
-          test -f pt/packet-tracer-mcp.pts
+          # already exists, so update its notes and upload with --clobber.
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release ${TAG} already exists — replacing its assets."
-            gh release upload "$TAG" dist/* pt/packet-tracer-mcp.pts --clobber
+            echo "Release ${TAG} already exists — replacing its notes and assets."
+            gh release edit "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+            gh release upload "$TAG" dist/* --clobber
           else
-            gh release create "$TAG" dist/* pt/packet-tracer-mcp.pts \
+            gh release create "$TAG" dist/* \
+              --notes-file "$RUNNER_TEMP/release-notes.md" \
               --verify-tag \
-              --title "$TAG" \
-              --generate-notes
+              --title "$TAG"
           fi
 
       - name: Summarise the release

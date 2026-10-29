@@ -34,7 +34,7 @@ secrets*
 
 # Packet Tracer artefacts (labs can be large and are usually not ours to share)
 *.pts
-!pt/packet-tracer-mcp.pts
+pt/
 *.pkt
 *.pka
 *.pkt.bak

@@ -69,8 +69,9 @@ in [docs/cli-semantics.md](docs/cli-semantics.md); the Wayland screenshot recipe
 Do this once per PT install; afterwards the module starts with PT automatically.
 
 1. Packet Tracer 9.0.1 running, with a `.pkt` open (the bridge only sees the **active** file).
-2. **Extensions → Scripting → Configure PT Script Modules… → Add…** and select
-   [`pt/packet-tracer-mcp.pts`](pt/packet-tracer-mcp.pts).
+2. Download `packet-tracer-mcp.pts` from the
+   [latest release](https://github.com/psampir/packet-tracer-mcp/releases/latest), then
+   **Extensions → Scripting → Configure PT Script Modules… → Add…** and select it.
 3. Select `packet-tracer-mcp` and click **Start**.
 4. Quit once with **File → Exit**, so PT saves the registration.
 

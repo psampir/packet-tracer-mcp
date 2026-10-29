@@ -9,13 +9,14 @@ on its own every time it starts: nothing here has to be repeated per session.
 
 ## Quick install (bundled module)
 
-The repository ships the exported module as
-[`pt/packet-tracer-mcp.pts`](../pt/packet-tracer-mcp.pts). Importing it is the
-whole setup; name, ID, script and requested privileges travel with the file.
+Download `packet-tracer-mcp.pts` from the
+[latest release](https://github.com/psampir/packet-tracer-mcp/releases/latest).
+Importing it is the whole setup; name, ID, script and requested privileges travel
+with the file.
 
 1. Start Packet Tracer and open the lab you want to drive.
 2. **Extensions → Scripting → Configure PT Script Modules… → Add…**
-3. Select `pt/packet-tracer-mcp.pts` and click **Open**.
+3. Select the downloaded `packet-tracer-mcp.pts` and click **Open**.
 4. Select `packet-tracer-mcp` in the list and click **Start**.
 5. Quit once with **File → Exit**, so PT saves the registration (see the clean-exit
    note in §3).
@@ -232,16 +233,17 @@ which is unchanged in this release.
    Nothing else on the system was touched, no service, no firewall rule, no
    network port.
 
-## 9. Rebuilding the bundled `.pts`
+## 9. Rebuilding the release asset
 
-`pt/packet-tracer-mcp.pts` is exported from PT; CI cannot generate it. Rebuild it
+`packet-tracer-mcp.pts` is exported from PT; CI cannot generate it. Rebuild it
 whenever `bridge/bridge.js` changes:
 
 1. *Configure PT Script Modules…* → `packet-tracer-mcp` → **Edit**.
 2. **Script Engine** → replace `bridge.js` with the new file → **Apply**.
 3. **Stop → Start**.
-4. **File → Export** and save over `pt/packet-tracer-mcp.pts`.
-5. Commit the new `.pts`; the release workflow attaches it to the GitHub Release.
+4. **File → Export** and save the module as `packet-tracer-mcp.pts`.
+5. Attach it to the release:
+   `gh release upload vX.Y.Z packet-tracer-mcp.pts --clobber`.
 
 The `.pts` is encrypted and tied to the PT build. Bump the project version when the
-bundled module changes, so the release asset and the wheel stay in step.
+asset changes, so the release notes, the wheel and the module stay in step.
