@@ -28,6 +28,8 @@ on the wire — `bridge/bridge.js` is untouched, so no re-paste is needed.
   (`examples/opencode-snippet.jsonc`, `~/.config/opencode/opencode.jsonc`).
 - The runtime mailbox keeps its old spelling: `PT_MCP_HOME`, default
   `~/.local/share/pt-mcp`, and the Python package stays `pt_mcp`.
+- Internal: `server.py` split into registry/readiness/tables/eval/snippets/hosts/
+  topology/raw + `tools/*`; the 22 tool names and behaviour are unchanged.
 
 ### Breaking
 

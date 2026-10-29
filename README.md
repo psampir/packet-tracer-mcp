@@ -223,7 +223,16 @@ Layout:
 | `src/pt_mcp/config.py` | paths (`PT_MCP_HOME`), timeout, `saved/` |
 | `src/pt_mcp/protocol.py` | `call_pt()` — atomic job write, poll, cleanup; `PTBridgeError` |
 | `src/pt_mcp/commands.py` | `normalize_commands()` for `configure` |
-| `src/pt_mcp/server.py` | the twenty-two MCP tools and `main()` |
+| `src/pt_mcp/registry.py` | the one MCP server instance and its instructions |
+| `src/pt_mcp/readiness.py` | `wait_ready()` — poll until a device shows a usable prompt |
+| `src/pt_mcp/tables.py` | device-type and cable names, validated before the call |
+| `src/pt_mcp/eval.py` | the `eval` op, its snippet helpers, the `_tool` JSON wrapper |
+| `src/pt_mcp/snippets.py` | the ES5 templates the host and topology tools ship |
+| `src/pt_mcp/hosts.py` | host bodies: addresses, DNS, HTTP, console, ping |
+| `src/pt_mcp/topology.py` | cable and port inventory bodies |
+| `src/pt_mcp/raw.py` | the `raw` body: error-to-data wrapper, truncation |
+| `src/pt_mcp/tools/` | the twenty-two tools, grouped observe/build/cli/hosts/raw |
+| `src/pt_mcp/server.py` | entry point: imports the tools, re-exports them, `main()` |
 | `bridge/bridge.js` | the ES5 script that runs **inside** Packet Tracer |
 | `tests/fake_bridge.py` | protocol-compatible stand-in bridge for the Python suite |
 | `tests/bridge/` | Node harness + tests that load the real `bridge.js` into `node:vm` |

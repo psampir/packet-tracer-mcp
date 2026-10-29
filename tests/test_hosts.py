@@ -11,8 +11,9 @@ from __future__ import annotations
 import json
 
 import pytest
+from seams import install_bridge, install_clock
 
-from pt_mcp import protocol, server
+from pt_mcp import server
 from pt_mcp.protocol import PTBridgeError
 
 
@@ -83,18 +84,16 @@ class ScriptedBridge:
 def fake(monkeypatch: pytest.MonkeyPatch) -> ScriptedBridge:
     """A scripted bridge for the tool body under test."""
     scripted = ScriptedBridge()
-    monkeypatch.setattr(server, "call_pt", scripted)
-    # run_op()-based tools go through the transport module's own reference.
-    monkeypatch.setattr(protocol, "call_pt", scripted)
-    return scripted
+    # Every module that holds a call_pt reference, the transport included, so
+    # both the eval-based tools and the run_op()-based ones see the fake.
+    return install_bridge(monkeypatch, scripted, transport=True)
 
 
 @pytest.fixture
 def clock(monkeypatch: pytest.MonkeyPatch) -> FakeClock:
     """Replace the module clock so ``wait`` and readiness never really sleep."""
     fake_clock = FakeClock()
-    monkeypatch.setattr(server, "time", fake_clock)
-    return fake_clock
+    return install_clock(monkeypatch, fake_clock)
 
 
 PING_OK = (
@@ -1087,7 +1086,7 @@ def test_eval_tools_surface_unexpected_errors(fake, jload, monkeypatch) -> None:
     def boom(*args, **kwargs):
         raise OSError("disk on fire")
 
-    monkeypatch.setattr(server, "call_pt", boom)
+    install_bridge(monkeypatch, boom)
 
     result = jload(server.get_config("PC1"))
 
