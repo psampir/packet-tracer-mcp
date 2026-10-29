@@ -93,7 +93,7 @@ branch commit:
 uv tool install --force "git+https://github.com/psampir/packet-tracer-mcp.git@main"
 ```
 
-Pin a release instead of `main` by replacing `@main` with `@v0.3.2`; then updating is a
+Pin a release instead of `main` by replacing `@main` with `@v0.3.3`; then updating is a
 deliberate version bump. After updating, restart the MCP client so it launches the new
 binary. The Script Module in PT is separate: it only needs re-importing when a release
 says so (the mailbox path is part of that contract).
