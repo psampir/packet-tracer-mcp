@@ -83,17 +83,14 @@ uvx --from "git+https://github.com/psampir/packet-tracer-mcp.git@main" packet-tr
 
 ### Updating
 
-`uv tool install` pins the commit it installed from; it does not follow `main` on its own.
-The command is the same one, with `--force`:
+`uv tool install` records the commit it resolved (`direct_url.json` in the tool
+environment); it does not follow `main` by itself, and `uv tool upgrade
+packet-tracer-mcp` answers "Nothing to upgrade" while the version number is
+unchanged. Update with the install command plus `--force`, which re-resolves the
+branch commit:
 
 ```sh
 uv tool install --force "git+https://github.com/psampir/packet-tracer-mcp.git@main"
-```
-
-or, when `main` has moved:
-
-```sh
-uv tool upgrade packet-tracer-mcp
 ```
 
 Pin a release instead of `main` by replacing `@main` with `@v0.3.2`; then updating is a

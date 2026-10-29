@@ -11,7 +11,7 @@ All notable changes to this project are documented here. The format follows
 - **The repository is public.** Install and update no longer need SSH or a
   collaborator invite:
   `uv tool install "git+https://github.com/psampir/packet-tracer-mcp.git@main"`.
-  The README documents `--force` reinstall, `uv tool upgrade` and the
+  The README documents `--force` reinstall, the pinned-tag alternative and the
   `uvx --from git+…` one-off.
 
 ### Added
