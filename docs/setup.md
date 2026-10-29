@@ -32,11 +32,11 @@ file.
 - The MCP server installed globally:
 
   ```sh
-  uv tool install "git+ssh://git@github.com/psampir/packet-tracer-mcp.git@main"
+  uv tool install "git+https://github.com/psampir/packet-tracer-mcp.git@main"
   ```
 
-  This puts `packet-tracer-mcp` on `PATH`. For development, a checkout with
-  `uv run --directory …` works too.
+  This puts `packet-tracer-mcp` on `PATH`; update it with the same command plus
+  `--force`. For development, a checkout with `uv run --directory …` works too.
 - For the manual flow below: [`bridge/bridge.js`](../bridge/bridge.js) open in
   an editor; you will paste its **entire** contents into PT. The bundled module
   skips this.

@@ -67,14 +67,39 @@ in [docs/cli-semantics.md](docs/cli-semantics.md); the Wayland screenshot recipe
 ## Install
 
 ```sh
-uv tool install "git+ssh://git@github.com/psampir/packet-tracer-mcp.git@main"
+uv tool install "git+https://github.com/psampir/packet-tracer-mcp.git@main"
 ```
 
 This installs the `packet-tracer-mcp` console script into `~/.local/bin`, so neither the
-MCP configuration nor the PT setup needs a repository path. For development, use a
-checkout instead: `uv run --directory /path/to/packet-tracer-mcp packet-tracer-mcp`.
+MCP configuration nor the PT setup needs a repository path. No account, SSH key or clone
+is involved. For development, use a checkout instead:
+`uv run --directory /path/to/packet-tracer-mcp packet-tracer-mcp`.
 
-Update later with `uv tool install --force "…@main"`.
+To run it without installing anything:
+
+```sh
+uvx --from "git+https://github.com/psampir/packet-tracer-mcp.git@main" packet-tracer-mcp
+```
+
+### Updating
+
+`uv tool install` pins the commit it installed from; it does not follow `main` on its own.
+The command is the same one, with `--force`:
+
+```sh
+uv tool install --force "git+https://github.com/psampir/packet-tracer-mcp.git@main"
+```
+
+or, when `main` has moved:
+
+```sh
+uv tool upgrade packet-tracer-mcp
+```
+
+Pin a release instead of `main` by replacing `@main` with `@v0.3.2`; then updating is a
+deliberate version bump. After updating, restart the MCP client so it launches the new
+binary. The Script Module in PT is separate: it only needs re-importing when a release
+says so (the mailbox path is part of that contract).
 
 ## One-time Packet Tracer setup
 

@@ -1,6 +1,7 @@
 {
   // Install once:
-  //   uv tool install "git+ssh://git@github.com/psampir/packet-tracer-mcp.git@main"
+  //   uv tool install "git+https://github.com/psampir/packet-tracer-mcp.git@main"
+  // Update with the same command plus --force, then restart the client.
   // Then paste the "packet-tracer" block below into
   // ~/.config/opencode/opencode.jsonc under the existing "mcp" -> "servers"
   // object. Do not duplicate keys. The command is on PATH, so no checkout path
