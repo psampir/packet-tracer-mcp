@@ -23,17 +23,17 @@ know any of that.
   agent (opencode, Claude, …)
         │  MCP over stdio (JSON-RPC)
         ▼
-  packet-tracer-mcp  ──write──▶  ~/.local/share/pt-mcp/jobs/<id>.json
+  packet-tracer-mcp  ──write──▶  ~/pt/pt-mcp/jobs/<id>.json
         ▲                                            │  file watcher
         │                                            ▼
-        └─────read─────  ~/.local/share/pt-mcp/results/<id>.json  ◀── bridge.js
+        └─────read─────  ~/pt/pt-mcp/results/<id>.json  ◀── bridge.js
                                                                   (inside PT)
 ```
 
 Consequences worth knowing up front:
 
 - **No networking at all**: no TCP port, no firewall rule, no auth token. The two sides share a
-  directory (`PT_MCP_HOME`, default `~/.local/share/pt-mcp`).
+  directory (`PT_MCP_HOME`, default `~/pt/pt-mcp`).
 - **The bridge acts on the active `.pkt` only.** Start PT, open the lab you want, then talk to it.
 - **Latency is one poll** (50 ms) plus whatever the device takes; every call is a round trip you can
   inspect with `ls` and `cat`.
@@ -153,7 +153,7 @@ and no re-paste of `bridge.js`: the Script Module you already have is enough.
 | `http_page` | `device, path="index.html", content=None, enable=True` | Start/stop the HTTP service, replace a page when `content` is given, return `{path, enabled, page}` |
 | `pc_command` | `device, command, wait=10, ready_timeout=45` | Type into a PC/server shell and return the **whole** new output after `wait` seconds |
 | `ping` | `src, dst, count=4, wait=10` | Ping from a host and parse it: `{sent, received, loss, replies, timed_out, unreachable, output}` (`count` is advisory; PT always sends four) |
-| `save` | `path=""` | Save the active `.pkt` (default `~/.local/share/pt-mcp/saved/<ts>.pkt`) |
+| `save` | `path=""` | Save the active `.pkt` (default `~/pt/pt-mcp/saved/<ts>.pkt`) |
 | `raw` | `js, max_chars=20000` | Escape hatch: evaluate JS in the PT engine. Returns a real JSON value, reports a thrown error with its JS line, and cuts long output with `"truncated": true` |
 
 A typical session: `status` → `add_device` × n → `link` → `configure` → `show` →
@@ -171,7 +171,7 @@ types into the shell when you need the host's own output, and `ping` turns it in
 | Symptom | Cause / fix |
 |---|---|
 | `Timed out … Packet Tracer is not responding` | PT not running, no `.pkt` open, or the Script Module stopped. Open a lab, then **Extensions → Scripting → Configure PT Script Modules… → `com.psampir.packet-tracer-mcp` → Start**. |
-| `bridge was never set up: base dir … does not exist` | The module has never run, so `~/.local/share/pt-mcp` was never created. Start it once (or click **Run File**). |
+| `bridge was never set up: base dir … does not exist` | The module has never run, so `~/pt/pt-mcp` was never created. Start it once (or click **Run File**). |
 | Jobs appear in `jobs/` but nothing answers | The file watcher isn't firing: click **Run File** in the Scripting interface to force a rescan. Also check the `PT_MCP_HOME` constant at the top of `bridge.js` matches the server's. |
 | Privilege / access-denied errors in PT | Re-open the module's **Security Privileges** tab, enable **Application**, **File Operations** and **Get/Change Network Info**, then Stop → Start. |
 | `device not found: X` | The name is wrong, or the device lives in a different (non-active) `.pkt`: the bridge only sees the active window. |

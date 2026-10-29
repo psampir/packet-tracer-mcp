@@ -22,7 +22,9 @@ import sys
 import time
 from pathlib import Path
 
-HOME = Path(os.environ.get("PT_MCP_HOME", "/home/pawel/.local/share/pt-mcp")).expanduser()
+HOME = Path(
+    os.environ.get("PT_MCP_HOME", str(Path.home() / "pt" / "pt-mcp"))
+).expanduser()
 JOBS = HOME / "jobs"
 RESULTS = HOME / "results"
 

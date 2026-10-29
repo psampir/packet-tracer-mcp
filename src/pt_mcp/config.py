@@ -1,7 +1,7 @@
 """Paths and tunables for the Packet Tracer bridge.
 
 Everything the transport needs is derived from one directory, ``PT_MCP_HOME``
-(default ``/home/pawel/.local/share/pt-mcp``) so a second Packet Tracer install —
+(default ``~/pt/pt-mcp``) so a second Packet Tracer install —
 or a test run — only has to point the environment variable somewhere else:
 
 ===============  ==========================================================
@@ -19,9 +19,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-#: Directory the PT Script Module and this server agree on. ``bridge.js`` hard-codes
-#: the same path (``PT_MCP_HOME`` at the top of the file) — change both together.
-DEFAULT_HOME = "/home/pawel/.local/share/pt-mcp"
+#: Directory the PT Script Module and this server agree on. ``bridge.js`` derives
+#: it from Packet Tracer's user folder (``getUserFolder()`` + ``/pt-mcp``), which
+#: is ``~/pt/pt-mcp`` on Linux; keep the two in step.
+DEFAULT_HOME = str(Path.home() / "pt" / "pt-mcp")
 
 #: How long a job may take before the transport gives up, in seconds.
 DEFAULT_TIMEOUT = 120.0

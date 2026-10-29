@@ -97,13 +97,13 @@ makes the matching op fail with a privilege/access-denied error:
 3. Verify: PT's script log shows
 
    ```
-   [pt-mcp] bridge ready (home=/home/pawel/.local/share/pt-mcp)
+   [pt-mcp] bridge ready (home=/home/you/pt/pt-mcp)
    ```
 
    and the directories now exist:
 
    ```fish
-   ls -la ~/.local/share/pt-mcp
+   ls -la ~/pt/pt-mcp
    # jobs  results  saved
    ```
 
@@ -138,9 +138,10 @@ Fix, in this order:
 2. **Restart the module**: Stop → Start in *Configure PT Script Modules…*.
 3. **Call `ptmcp_rescan()`** from the PT Scripting console/interface.
 4. Check that the `PT_MCP_HOME` path at the top of `bridge.js` is exactly the one
-   the server uses (`echo $PT_MCP_HOME`, default
-   `/home/pawel/.local/share/pt-mcp`). A mismatch means the two sides watch
-   different directories and *every* call times out.
+   the server uses (`echo $PT_MCP_HOME`, default `~/pt/pt-mcp`). The bridge builds
+   it from PT's own user folder (`getUserFolder() + "/pt-mcp"`), so the two only
+   diverge when `PT_MCP_HOME` is set on one side and not the other. A mismatch
+   means the two sides watch different directories and *every* call times out.
 
 ## 6. Recovery: a wedged console
 
@@ -227,15 +228,16 @@ nothing in the repository touches your PT profile or `~/pt/extensions`.
    `ptmcp.pts` / `ptmcp` files from `~/pt/extensions`, they are stale copies
    from the pre-0.3.0 name and nothing reads them any more.
 
-The runtime directory (`~/.local/share/pt-mcp`) and the `PT_MCP_HOME` variable
-keep their old spelling: they are the mailbox contract with `bridge/bridge.js`,
-which is unchanged in this release.
+The runtime directory is `~/pt/pt-mcp`: the bridge derives it from PT's user
+folder, so a module exported on another machine finds it without an edit. Set
+`PT_MCP_HOME` on both sides to point elsewhere (`~/.local/share/pt-mcp` from
+pre-0.3.2 releases still works that way).
 
 ## 8. Uninstalling
 
 1. *Configure PT Script Modules…* → select `com.psampir.packet-tracer-mcp` → **Stop**, then
    **Delete**.
-2. Optionally remove the runtime directory: `rm -rf ~/.local/share/pt-mcp`.
+2. Optionally remove the runtime directory: `rm -rf ~/pt/pt-mcp`.
    Nothing else on the system was touched, no service, no firewall rule, no
    network port.
 

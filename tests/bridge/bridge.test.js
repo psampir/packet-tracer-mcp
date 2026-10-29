@@ -44,7 +44,7 @@ test("loading bridge.js is side-effect-free", () => {
   assert.equal(iso.ctx.PT_MCP_EVALS, 1, "first evaluation must not run main()");
   assert.deepEqual(iso.logs, [], "no PT log output before main()");
   assert.equal(iso.devices.size, 0);
-  assert.equal(iso.ctx.PT_MCP_HOME, "/home/pawel/.local/share/pt-mcp");
+  assert.equal(iso.ctx.PT_MCP_HOME, "/home/test/pt/pt-mcp");
   assert.equal(iso.PT_MCP_JOBS, iso.ctx.PT_MCP_HOME + "/jobs");
   assert.equal(iso.PT_MCP_RESULTS, iso.ctx.PT_MCP_HOME + "/results");
 });
