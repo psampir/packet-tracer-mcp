@@ -4,7 +4,25 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.3] - 2026-10-29
+
+### Added
+
+- **`packet-tracer-mcp --doctor`** prints the mailbox in use, every candidate
+  with its state (live / empty / absent), the traffic the bridge left behind and
+  a hint; it exits 0 only when a live mailbox exists. It never talks to Packet
+  Tracer, so it also runs with the Script Module stopped, and it is the first
+  thing to paste into a bug report. `--version` comes with it.
+- **The server finds the mailbox on its own.** `pt_mcp.config.inspect` tries
+  `~/pt/pt-mcp`, `~/Documents/pt-mcp`, `~/Documents/Packet Tracer*/pt-mcp` and
+  `~/Library/Application Support/Packet Tracer*/pt-mcp` in that order, and takes
+  the first candidate that already holds `jobs/` and `results/`, i.e. the one
+  the bridge created. `PT_MCP_HOME` still wins and skips the search. This is
+  what makes Windows and macOS work without configuration, because the module
+  derives the directory from PT's own user folder.
+- `tests/test_changelog.py` fails in CI when `pyproject.toml` has no matching
+  CHANGELOG section, or when the newest released section is not the project
+  version. The release workflow depends on both.
 
 ### Changed
 
@@ -13,12 +31,8 @@ All notable changes to this project are documented here. The format follows
   `uv tool install "git+https://github.com/psampir/packet-tracer-mcp.git@main"`.
   The README documents `--force` reinstall, the pinned-tag alternative and the
   `uvx --from git+…` one-off.
-
-### Added
-
-- `tests/test_changelog.py` fails in CI when `pyproject.toml` has no matching
-  CHANGELOG section, or when the newest released section is not the project
-  version. The release workflow depends on both.
+- The "bridge was never set up" error now names a live mailbox found elsewhere
+  and the exact `PT_MCP_HOME` to set, instead of only suggesting `mkdir`.
 
 ## [0.3.2] - 2026-10-29
 

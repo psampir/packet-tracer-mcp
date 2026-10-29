@@ -107,6 +107,11 @@ makes the matching op fail with a privilege/access-denied error:
    # jobs  results  saved
    ```
 
+   On Windows and macOS the directory sits under Packet Tracer's own user
+   folder. You never have to guess it: `packet-tracer-mcp --doctor` prints the
+   path it resolved, the candidates it tried, and the last answer the bridge
+   gave. Exit code 0 means a live mailbox was found.
+
 > **Quit Packet Tracer cleanly.** The module registration lives in PT's profile
 > and is written on **`File → Exit`**. A crash or a killed process loses it: the
 > next launch starts with an empty module list, so nothing auto-starts. If that
@@ -255,3 +260,31 @@ whenever `bridge/bridge.js` changes:
 
 The `.pts` is encrypted and tied to the PT build. Bump the project version when the
 asset changes, so the release notes, the wheel and the module stay in step.
+
+## 10. Windows and macOS
+
+There is nothing platform-specific to configure, because the module derives the
+mailbox from Packet Tracer instead of a fixed path: it is `getUserFolder() +
+"/pt-mcp"` inside PT. The server finds that directory by trying, in order:
+
+1. `~/pt/pt-mcp` (Packet Tracer 9.0.1 on Linux keeps its profile in `~/pt`)
+2. `~/Documents/pt-mcp`
+3. `~/Documents/Packet Tracer*/pt-mcp`
+4. `~/Library/Application Support/Packet Tracer*/pt-mcp`
+
+The first candidate that already contains `jobs/` and `results/` wins, because
+those directories exist only after the Script Module has started. `PT_MCP_HOME`
+overrides the search, which is the escape hatch when your PT profile lives
+somewhere unusual (a redirected Documents folder, a network home).
+
+Diagnosis without guesswork:
+
+```sh
+packet-tracer-mcp --doctor
+```
+
+It never contacts Packet Tracer, so run it with the module stopped too. If it
+reports no mailbox at all, start the module once and run it again; if PT's log
+shows `[pt-mcp] bridge ready (home=…)` with a path that is not in the candidate
+list, set `PT_MCP_HOME` to it on both sides (server and module) and restart the
+client.

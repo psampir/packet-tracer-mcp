@@ -24,11 +24,13 @@ in, one file out, one request id per call.
 | `<base>/results/` | bridge | server | one response per call |
 | `<base>/saved/` | server | (none) | default target for `save` |
 
-`<base>` is `$PT_MCP_HOME`, default `~/pt/pt-mcp`. The bridge derives its own
-value at the top of `bridge.js` from Packet Tracer's user folder
-(`getUserFolder() + "/pt-mcp"`, which is `~/pt/pt-mcp` on Linux); the two values
-must match, otherwise every call times out. On a platform where PT's user folder
-is elsewhere, set `PT_MCP_HOME` on both sides.
+`<base>` is `$PT_MCP_HOME` when set. Otherwise the server resolves it: the bridge
+derives its own value at the top of `bridge.js` from Packet Tracer's user folder
+(`getUserFolder() + "/pt-mcp"`), and the server takes the first of
+`~/pt/pt-mcp`, `~/Documents/pt-mcp`, `~/Documents/Packet Tracer*/pt-mcp` and
+`~/Library/Application Support/Packet Tracer*/pt-mcp` that already holds `jobs/`
+and `results/`. The two sides must agree, otherwise every call times out;
+`packet-tracer-mcp --doctor` prints the resolution.
 
 ## Request
 

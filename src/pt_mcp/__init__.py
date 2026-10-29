@@ -11,6 +11,8 @@ currently active in Packet Tracer.
 Modules:
 
 * :mod:`pt_mcp.config` — paths (``PT_MCP_HOME``), timeout and the saved/ dir.
+* :mod:`pt_mcp.doctor` — ``--doctor``: the resolved mailbox, its candidates and
+  the bridge's last answer.
 * :mod:`pt_mcp.protocol` — the transport: :func:`call_pt`, :class:`PTBridgeError`.
 * :mod:`pt_mcp.commands` — :func:`normalize_commands` for ``configure``.
 * :mod:`pt_mcp.registry` — the one MCP server instance and its instructions.
@@ -25,6 +27,6 @@ Modules:
 
 from __future__ import annotations
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 __all__ = ["__version__"]
