@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`pt_dns_list()` without a name returned `[object Object]` for every entry.**
+  Entries are now `{"name": ..., "ip": ...}` instead of an opaque pair.
+
 ## [0.2.2] - 2026-10-28
 
 ### Fixed

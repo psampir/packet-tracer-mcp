@@ -596,15 +596,25 @@ def test_pt_dns_record_rejects_a_non_object(fake, jload) -> None:
 
 
 def test_pt_dns_list_returns_every_entry(fake, jload) -> None:
-    fake.eval_answers = [{"count": 2, "entries": ["www.g4.lab 1.1.1.1", "api.g4.lab 2.2.2.2"]}]
+    fake.eval_answers = [
+        {
+            "count": 2,
+            "entries": [
+                {"name": "www.g4.lab", "ip": "1.1.1.1"},
+                {"name": "api.g4.lab", "ip": "2.2.2.2"},
+            ],
+        }
+    ]
 
     result = jload(server.pt_dns_list("Server-DNS"))
 
     assert result["count"] == 2
-    assert result["entries"][1] == "api.g4.lab 2.2.2.2"
+    assert result["entries"][1] == {"name": "api.g4.lab", "ip": "2.2.2.2"}
     js = fake.last_js()
     assert "getEntryCount" in js
     assert "getEntryAt" in js
+    assert "entry.first" in js
+    assert "entry.second" in js
 
 
 def test_pt_dns_list_resolves_one_name(fake, jload) -> None:

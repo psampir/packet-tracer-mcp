@@ -895,8 +895,10 @@ def _dns_list(device: str, name: str | None = None) -> dict[str, Any]:
             "    var count = 0;\n"
             "    try { count = dns.getEntryCount(); } catch (e2) { count = 0; }\n"
             "    for (var i = 0; i < count; i += 1) {\n"
-            "        try { entries.push(String(dns.getEntryAt(i))); }"
-            ' catch (e3) { entries.push(""); }\n'
+            "        try {\n"
+            "            var entry = dns.getEntryAt(i);\n"
+            "            entries.push({name: String(entry.first), ip: String(entry.second)});\n"
+            "        } catch (e3) { entries.push({name: \"\", ip: \"\"}); }\n"
             "    }\n"
             "    return {count: count, entries: entries};"
         )
