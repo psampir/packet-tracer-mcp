@@ -651,6 +651,17 @@ def test_pt_http_page_keeps_the_page_when_no_content_is_given(fake, jload) -> No
     assert "setPageContents" not in js
 
 
+def test_pt_http_page_disable_does_not_query_the_disabled_server(fake, jload) -> None:
+    """isEnabled()/getPage() after setEnable(false) takes Packet Tracer down."""
+    fake.eval_answers = [{"path": "index.html", "enabled": False, "page": ""}]
+
+    result = jload(server.pt_http_page("Server-DNS", enable=False))
+
+    assert result["enabled"] is False
+    js = fake.last_js()
+    assert "if (false)" in js, "a disabled HttpServer must not be queried"
+
+
 def test_pt_http_page_rejects_a_non_object(fake, jload) -> None:
     fake.eval_answers = [7]
 

@@ -568,8 +568,15 @@ _HTTP_PAGE_JS = string.Template(
     http.setEnable($enabled);
 $content
     var result = {path: $path, enabled: $enabled, page: ""};
-    try { result.enabled = !!http.isEnabled(); } catch (e2) { result.enabled = $enabled; }
-    try { result.page = String(http.getPage($path)); } catch (e3) { result.page = ""; }
+    if ($enabled) {
+        try { result.enabled = !!http.isEnabled(); } catch (e2) { result.enabled = true; }
+        try { result.page = String(http.getPage($path)); } catch (e3) { result.page = ""; }
+    } else {
+        /* A disabled HttpServer must not be queried: isEnabled()/getPage()
+         * after setEnable(false) takes Packet Tracer down. */
+        result.enabled = false;
+        result.page = "";
+    }
     return result;
 }())"""
 )

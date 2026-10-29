@@ -14,6 +14,9 @@ All notable changes to this project are documented here. The format follows
   path.
 - **IPv6 addresses are formatted.** `pt_get_config` / `pt_set_ipv6` returned
   `[object Object]`; entries are now rendered as `address/prefix`.
+- **`pt_http_page(enable=False)` no longer queries the disabled server.**
+  `isEnabled()` / `getPage()` after `setEnable(false)` took Packet Tracer down;
+  the tool now returns `enabled: false` without touching the process.
 
 ## [0.2.1] - 2026-10-28
 
