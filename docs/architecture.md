@@ -19,7 +19,7 @@ repository. Everything below elaborates that one sentence.
 
 The goal is narrow and concrete: **an agent configures a running Packet Tracer
 topology without clicking the GUI.** That covers the whole workflow a lab
-exercise needs —
+exercise needs:
 
 - add and remove devices (`add_device`, `remove_device`),
 - cable them (`link`, `autolink`),
@@ -31,7 +31,7 @@ exercise needs —
 Packet Tracer is the source of truth and the thing that does the work: it owns
 the topology, the device models, and the simulated IOS. This project is only the
 **transport and the tool surface** in front of it. Nothing here reimplements a
-router, parses configs into a model, or renders a diagram — the agent asks PT to
+router, parses configs into a model, or renders a diagram: the agent asks PT to
 change PT, then asks it what happened.
 
 The agent speaks MCP over stdio; the PT side is a Script Module running the ES5
@@ -42,7 +42,7 @@ processes with one thing in common: a directory.
 
 ### What the Script Engine cannot do
 
-Packet Tracer's Script Module engine is **QtScript — ES5 only** (`var` and
+Packet Tracer's Script Module engine is **QtScript: ES5 only** (`var` and
 `function`; no `let`, arrows, template literals, classes, or `import`). Two
 consequences dominate the design:
 
@@ -61,7 +61,7 @@ server. Any design that assumes either one is dead on arrival.
 
 `SystemFileManager` (`ipc.systemFileManager()`) is the one reliable host bridge,
 and it is generous: read a file, write a file, list a directory, create/delete
-directories and files, and — critically — **register a file watcher**
+directories and files, and (critically) **register a file watcher**
 (`getFileWatcher()` → `registerEvent("fileChanged"|"directoryChanged")` +
 `addPath()`). That is enough to build a durable request/response queue:
 
@@ -80,14 +80,14 @@ No listener, no handshake, no port to firewall, no token to distribute.
 | **Embedded webview / Qt bridge hack** | Requires patching or a custom PT build; not portable across installs and unsupported. |
 | **ExApp / PTMP (PT's own scripting host)** | Heavyweight external-plugin toolchain, version-pinned, and not what a stdlib-only setup should depend on. Also unnecessary: the file system already is a channel. |
 | **Screen-scraping / GUI automation** | Exactly the thing the project exists to avoid: brittle, GUI-bound, and it fights PT for input focus. |
-| **A second daemon PT talks to** | PT still could not reach it — no networking. The file system is the daemon. |
+| **A second daemon PT talks to** | PT still could not reach it, no networking. The file system is the daemon. |
 
 The cost of the file-drop choice is honest and small: **latency is one poll
 interval (50 ms) rather than microseconds**, and every call is serialized
 through one directory. Both are invisible next to the seconds a simulated device
 takes to boot or apply a config line. The benefit is that the whole protocol is
 inspectable with `ls` and `cat`, survives a PT restart without reconfiguration,
-and needs no credential — only the PT privileges you granted the module (see
+and needs no credential, only the PT privileges you granted the module (see
 [Security model](#security-model)).
 
 ## Components
@@ -118,7 +118,7 @@ flowchart LR
 
 Read it as two independent loops that meet in the middle: the server owns
 `jobs/` on the way in and `results/` on the way out; the bridge owns the reverse.
-Neither side knows how the other is implemented — only the file names and the
+Neither side knows how the other is implemented, only the file names and the
 JSON shape.
 
 ## Call flow: one `configure`
@@ -138,7 +138,7 @@ sequenceDiagram
     participant R as results/
 
     A->>S: configure(device, commands, mode, dry_run)
-    S->>S: drop blanks and "!" — no mode policy here
+    S->>S: drop blanks and "!", no mode policy here
     opt dry_run
         S->>B: plan (no get_state wait, nothing is typed)
         B-->>S: the exact lines that would be sent
@@ -174,13 +174,13 @@ explicitly ignores `.tmp` files when scanning.
 **Dedupe on the bridge side.** `PT_MCP_SEEN` remembers ids already handled in
 this PT session, so a duplicate watcher event (these fire in bursts) cannot run a
 config twice. The bridge deletes the job **after** writing the result, so a crash
-between the two leaves a job that a later rescan will retry — the safe direction.
+between the two leaves a job that a later rescan will retry: the safe direction.
 
 **Mode, and why the sequence is computed on the PT side.** Console state is
 modal: `enable` gets you `#`, `configure terminal` gets you `(config)#`, an
 interface block gets you `(config-if)#`. An agent that sends only the interesting
 lines ("hostname R1", "no shutdown") would otherwise type them into whatever mode
-the previous call left behind — but the server cannot know that mode, and cannot
+the previous call left behind, but the server cannot know that mode, and cannot
 know whether the target is a PC's `C:\>` at all.
 
 So `normalize_commands()` only splits and strips, and the bridge asks the device
@@ -188,7 +188,7 @@ for its prompt (`getPrompt()`) and decides:
 
 | Prompt | `auto` does |
 |---|---|
-| `C:\>` (shell) | sends the lines verbatim — **zero** insertions on a PC |
+| `C:\>` (shell) | sends the lines verbatim, **zero** insertions on a PC |
 | `Switch>` | prepends `enable`, then decides again |
 | `Switch#` | `configure terminal` + body + `end`, unless the first line is an exec verb (`show`, `ping`, …) |
 | `S1(config)#` | body + `end` |
@@ -196,11 +196,11 @@ for its prompt (`getPrompt()`) and decides:
 `mode="raw"` disables all of it, `mode="exec"` never enters config, `mode="config"`
 forces the wrappers, and `keep_session=True` drops the trailing `end`. The
 requested mode and the resolved one are both returned (`mode`, `effective_mode`),
-and `dry_run=True` returns the plan without typing anything — the cheapest way to
+and `dry_run=True` returns the plan without typing anything: the cheapest way to
 catch a mode bug before it costs a console. Full rules:
 [cli-semantics.md](cli-semantics.md).
 
-Lines go through the device's `ConsoleLine.enterCommand(cmd)` (preferred — it
+Lines go through the device's `ConsoleLine.enterCommand(cmd)` (preferred: it
 exposes `getOutput()` and `getPrompt()`), falling back to
 `CiscoDevice.enterCommand(cmd, mode)` with an **empty** mode string, meaning
 "keep the line's current mode". Each line is sent **alone**, then the bridge
@@ -214,7 +214,7 @@ skipped silently.
 `time.sleep` until a freshly added router leaves
 `--- System Configuration Dialog ---` and shows a prompt (PTM-01).
 
-**Atomicity on the way out — best effort.** `SystemFileManager` has no `rename`,
+**Atomicity on the way out: best effort.** `SystemFileManager` has no `rename`,
 so the bridge writes the result in one call and the server tolerates a partial
 read by retrying the JSON parse every 50 ms instead of failing.
 
@@ -245,12 +245,12 @@ sequenceDiagram
 
 This is what keeps `bridge.js` stable: a new capability on the API costs a Python
 change and no Script Module re-paste. The trade-off is that the JS runs inside the
-engine with the module's privileges, exactly like `raw` — read the
+engine with the module's privileges, exactly like `raw`: read the
 [security model](#security-model).
 
 ## Wire protocol (summary)
 
-Full detail — every op, every argument, every result shape — is in
+Full detail (every op, every argument, every result shape) is in
 [protocol.md](protocol.md). The contract is two objects:
 
 ```json
@@ -262,8 +262,8 @@ Full detail — every op, every argument, every result shape — is in
 {"id": "7f3a1c9d2e04", "ok": false, "error": "device not found: R1"}
 ```
 
-- `id` — 12 hex characters (`uuid4().hex[:12]`), also the file stem on both sides.
-- `op` — `ping`, `list_devices`, `add_device`, `remove_device`, `link`,
+- `id`: 12 hex characters (`uuid4().hex[:12]`), also the file stem on both sides.
+- `op`: `ping`, `list_devices`, `add_device`, `remove_device`, `link`,
   `autolink`, `get_state`, `plan`, `configure`, `exec` (and `show` as its alias),
   `power`, `skip_boot`, `save`, `eval`.
 - Exactly one of `result` / `error`. The server turns `error` into
@@ -274,19 +274,19 @@ Full detail — every op, every argument, every result shape — is in
 
 **The active file only.** The bridge reaches PT through
 `ipc.appWindow().getActiveWorkspace()`, so it configures whichever `.pkt` is in
-front — never a lab open in another window, never a file on disk it was not given.
+front, never a lab open in another window, never a file on disk it was not given.
 This is a deliberate safety property (no accidental cross-lab edits) and the
 first thing to check when a device "does not exist".
 
 **Jobs are processed serially.** `processPending()` holds a re-entrancy guard
 (`PT_MCP_BUSY` / `PT_MCP_AGAIN`): watcher events that arrive mid-run coalesce into
-one more pass rather than running concurrently. One console, one command stream —
+one more pass rather than running concurrently. One console, one command stream:
 no interleaved configs, no race for a device's console line.
 
 **One call is one round trip, and it is bounded.** `PT_MCP_TIMEOUT` (default
 120 s) caps every job. On timeout the server **deletes its own job file** before
 raising, so a bridge that wakes up later cannot execute a command nobody is
-waiting for — a half-applied config the agent never saw is worse than no config.
+waiting for: a half-applied config the agent never saw is worse than no config.
 The raised error carries a PT-side checklist instead of a bare "timeout".
 
 **A dropped watcher event is recoverable.** Some setups (AppImage/FUSE mounts,
@@ -325,11 +325,11 @@ The trust boundary is PT's own sandbox, not this project's code.
 
   Drop *Change Network Info* and the bridge can no longer mutate the topology:
   `status` and `list_devices` keep working, while add/link/power/configure
-  fail with an access-denied error. That is a supported way to run it — though
+  fail with an access-denied error. That is a supported way to run it, though
   whether `show` still answers depends on the build, since issuing a command
   through the console line can itself be gated.
 - **`raw` is arbitrary JS in the PT engine.** It is `eval()` of a string you
-  (or your agent) pass, with the global `ipc` object in scope — i.e. anything the
+  (or your agent) pass, with the global `ipc` object in scope, i.e. anything the
   module's privileges allow, including file access inside PT's sandbox. It exists
   because PT's API is larger than eleven tools and a new op otherwise means
   editing `bridge.js` and re-pasting it by hand. It is documented as an escape
@@ -343,7 +343,7 @@ The trust boundary is PT's own sandbox, not this project's code.
 ## Failure modes
 
 Every entry is reachable from the outside, and the first four are the ones that
-look alike: the call times out with the same checklist. Work down the list —
+look alike: the call times out with the same checklist. Work down the list:
 it is ordered by how often each one is the answer.
 
 | Symptom | Cause | Fix |
@@ -355,10 +355,10 @@ it is ordered by how often each one is the answer.
 | `access denied` / privilege error in PT's log | **Privilege missing** | Enable *Application* + *File Operations* + *Get*/*Change Network Info* on the module, then Stop → Start. |
 | Error that the base dir does not exist | Bridge **never ran** | Start the module once (it creates `jobs/`, `results/`, `saved/`), or `mkdir -p` them. |
 | Commands succeed but `output` is empty or half a banner | **Device still booting** | The server already waits up to `ready_timeout` (45 s); raise it, use `power(..., ready=True)`, or `skip_boot` for scripted setups. |
-| `createLink` fails or the link is missing | **Wrong port name** — names are case-sensitive and model-specific | `show` a `show ip interface brief`, or use `autolink` and let PT choose compatible ports. |
+| `createLink` fails or the link is missing | **Wrong port name**: names are case-sensitive and model-specific | `show` a `show ip interface brief`, or use `autolink` and let PT choose compatible ports. |
 | Serial link is up but the interface stays `down` / protocol down | **Serial clock rate missing on the DCE end** | Configure `clock rate 64000` (and `no shutdown`) on the DCE side; `show controllers serial 0/0/0` tells you which end is DCE. |
 | `device not found: X` | Wrong name, or the device is in a non-active `.pkt` | `list_devices` on the active file; bring the right lab to the front. |
-| A call times out, then the config shows up minutes later | Should not happen — the server deletes a timed-out job | If it does, `bridge.js` in PT is an older copy: re-paste it and Stop → Start. |
+| A call times out, then the config shows up minutes later | Should not happen: the server deletes a timed-out job | If it does, `bridge.js` in PT is an older copy: re-paste it and Stop → Start. |
 
 ## Extending it
 
@@ -373,7 +373,7 @@ table and a test that asserts both the generated JS and the unwrapped value.
 **A new bridge op** is needed only when the console or the workspace itself must
 change. That means changing exactly three places, in this order:
 
-1. `dispatch()` in [`bridge/bridge.js`](../bridge/bridge.js) — the PT-side
+1. `dispatch()` in [`bridge/bridge.js`](../bridge/bridge.js), the PT-side
    implementation, ES5 only;
 2. a tool in [`src/pt_mcp/server.py`](../src/pt_mcp/server.py) that calls
    `run_op("<op>", args)`;
@@ -382,6 +382,6 @@ change. That means changing exactly three places, in this order:
 
 The transport does not change: any op is one `{"id","op","args"}` in and one
 `{"id","ok","result"|"error"}` out. `bridge.js` is copied into PT by hand, so a
-change there is a stop/start of the Script Module — which is why the API surface
+change there is a stop/start of the Script Module, which is why the API surface
 (hosts, ports, DNS, HTTP, topology) is reached through `eval` instead, and why
 `raw` still exists as the last resort.

@@ -22,7 +22,7 @@ in, one file out, one request id per call.
 |---|---|---|---|
 | `<base>/jobs/` | server | bridge | one request per call |
 | `<base>/results/` | bridge | server | one response per call |
-| `<base>/saved/` | server | — | default target for `save` |
+| `<base>/saved/` | server | (none) | default target for `save` |
 
 `<base>` is `$PT_MCP_HOME`, default `/home/pawel/.local/share/pt-mcp`. The bridge
 hard-codes the same default at the top of `bridge.js`; the two values must match,
@@ -36,10 +36,10 @@ otherwise every call times out.
 {"id": "<id>", "op": "<op>", "args": { }}
 ```
 
-- `id` — 12 hex characters (`uuid4().hex[:12]`), unique per call, also the
+- `id`: 12 hex characters (`uuid4().hex[:12]`), unique per call, also the
   file stem of both the job and its result.
-- `op` — one of the ops below.
-- `args` — op-specific object; `{}` when the op takes nothing.
+- `op`: one of the ops below.
+- `args`: op-specific object; `{}` when the op takes nothing.
 
 ### Atomicity
 
@@ -53,7 +53,7 @@ of failing outright.
 
 ## Response
 
-`<base>/results/<id>.json` — exactly one of:
+`<base>/results/<id>.json`: exactly one of:
 
 ```json
 {"id": "<id>", "ok": true,  "result": { }}
@@ -69,17 +69,17 @@ tool renders that as `{"ok": false, "error": "Packet Tracer bridge error for op
 
 | Op | `args` | `result` | MCP tool |
 |---|---|---|---|
-| `ping` | — | `{"version": "9.0.1…", "deviceCount": N}` | `status` |
-| `list_devices` | — | `{"devices": [{name, type, typeName, model}], "links": N}` | `list_devices` |
+| `ping` | (none) | `{"version": "9.0.1…", "deviceCount": N}` | `status` |
+| `list_devices` | (none) | `{"devices": [{name, type, typeName, model}], "links": N}` | `list_devices` |
 | `add_device` | `{name, type, model, x, y}` | `{"name": "<actual name>", "ready": bool}` | `add_device` |
 | `remove_device` | `{name}` | `{"removed": true\|false}` | `remove_device` |
 | `link` | `{a, aPort, b, bPort, cable}` | `{"linked": true}` | `link` |
 | `autolink` | `{a, b}` | `{"ok": true}` | `autolink` |
-| `get_state` | `{device}` | `{"name", "prompt", "mode", "booting", "hasIos", "type", "model"}` | — (used by `wait_ready`) |
+| `get_state` | `{device}` | `{"name", "prompt", "mode", "booting", "hasIos", "type", "model"}` | (used by `wait_ready`) |
 | `plan` | `{device, lines, mode, keep_session}` | `{"lines": [string], "mode": "auto", "effective_mode": "raw"\|"exec"\|"config", "prompt", "booting"}` | `configure(dry_run=True)` |
 | `configure` | `{device, lines, mode, keep_session, stop_on_error, timeout_ms}` | `{"prompt", "lines": [{line, prompt, output, ok}], "output", "stopped_on", "ok", "mode", "effective_mode"}` | `configure` |
 | `exec` | `{device, command, timeout_ms}` | same shape as `configure`, `effective_mode: "exec"` | `show` |
-| `show` | `{device, command}` | alias of `exec`, kept for older clients | — |
+| `show` | `{device, command}` | alias of `exec`, kept for older clients | (none) |
 | `power` | `{device, on: bool}` | `{"ok": true}` | `power` |
 | `skip_boot` | `{device}` | `{"ok": true}` | `skip_boot`, `add_device(skip_boot=True)` |
 | `save` | `{path}` | `{"saved": true, "path": "…"}` | `save` |
@@ -127,14 +127,14 @@ which becomes `PT API error: <message> (op=<tool>, device=<device>)`.
 
 Consequences for the wire format:
 
-- **no new ops** — the installed Script Module keeps working, and every one of
+- **no new ops**: the installed Script Module keeps working, and every one of
   these tools works against an older `bridge.js`;
 - the PT-side cost is one `eval` op per call (two for `pc_command`);
 - `raw` is still the escape hatch, but it no longer has to be the *only* way to
   reach the API (PTM-03).
 
 Because `eval` is arbitrary JS, the server does not restrict what a snippet may
-do — only the installed script's Security Privileges and PT's own API do. Read
+do: only the installed script's Security Privileges and PT's own API do. Read
 [architecture.md](architecture.md#security-model) before widening them.
 
 ## Lifecycle and cleanup
@@ -150,7 +150,7 @@ A successful call, in order:
 A timed-out call (default 120 s, `PT_MCP_TIMEOUT`):
 
 - the server **deletes its own `jobs/<id>.json`** before raising, so a bridge that
-  comes back later cannot execute a stale command — a half-applied config from a
+  comes back later cannot execute a stale command: a half-applied config from a
   job nobody is waiting for is worse than no config;
 - raises `PTBridgeError` with a checklist of PT-side causes (PT not running, no
   active `.pkt`, module not started, watcher silent, privileges missing).

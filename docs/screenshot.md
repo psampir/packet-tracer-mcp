@@ -3,7 +3,7 @@
 A lab report needs the diagram, and Packet Tracer 9.0.1 has **no API to render the
 workspace to an image**: `ipc.appWindow()` exposes the window and the file
 operations, `LogicalWorkspace` exposes devices, links and the CLI, but nothing
-returns a bitmap. `packet-tracer-mcp` therefore has no `export_png` — PTM-13 ends as
+returns a bitmap. `packet-tracer-mcp` therefore has no `export_png`: PTM-13 ends as
 "wontfix + docs", and this page is the docs.
 
 Two ways out, both fine:
@@ -24,7 +24,7 @@ sudo dnf install -y grim slurp ImageMagick jq
 ```
 
 `grim` is a Wayland screenshot tool; under niri it captures an **output** (the
-whole monitor), not a single window — that is the trap this recipe avoids.
+whole monitor), not a single window: that is the trap this recipe avoids.
 
 ### 1. Find the Packet Tracer window
 
@@ -44,7 +44,7 @@ title). If PT is on another workspace, this still works: niri switches to it.
 niri msg action focus-window --id 136
 ```
 
-### 3. Grab the window — fullscreen trick (automatic)
+### 3. Grab the window: fullscreen trick (automatic)
 
 niri can make a window fill the output, which turns "capture the window" into
 "capture one output":
@@ -90,7 +90,7 @@ window.save("/home/pawel/pt-shots/pt-window.png")
 ```
 
 For a quick "PT is the only window on a flat background" grab, `magick full.png
--trim +repage pt-window.png` removes the uniform border — but it also trims the
+-trim +repage pt-window.png` removes the uniform border, but it also trims the
 background *inside* the topology pane, so check the result before using it.
 
 ### 6. Check the result
@@ -108,12 +108,12 @@ the topology area plus one or two `show` windows, not the whole canvas.
 2. Take the screenshot with the system tool: **Print Screen** on Windows,
    **Cmd+Shift+4** on macOS, `grim -g "$(slurp)"` / `niri msg action screenshot`
    on niri (opens the screenshot UI, which can save a file or copy to clipboard).
-3. Crop to the relevant area — the PT canvas is mostly white space.
+3. Crop to the relevant area: the PT canvas is mostly white space.
 
 Agents without a browser/desktop can still produce a diagram: render it from the
 topology the bridge already knows (`list_devices` + `list_links`) with
 Graphviz or matplotlib, or as a small HTML/SVG page and call the client's
-`browser.preview`. That is a *diagram of the topology*, not a screenshot — say so
+`browser.preview`. That is a *diagram of the topology*, not a screenshot; say so
 in the report.
 
 ## What to capture for a lab report
@@ -124,7 +124,7 @@ in the report.
 | Addressing | `get_config("PC-Users")` / `list_ports("R1")` output, or `show ip interface brief` |
 | Routing / VLANs | `show("R1", "show ip route")`, `show("S1", "show vlan brief")` |
 | Services | `dns_list("Server-DNS")`, `http_page("Server-DNS")` |
-| Proof of connectivity | `ping("PC-Users", "192.168.20.10")` — its `output` is the citable evidence |
+| Proof of connectivity | `ping("PC-Users", "192.168.20.10")`; its `output` is the citable evidence |
 
 Text output is better evidence than a screenshot for configuration; use the PNG
 for the diagram.
@@ -137,4 +137,4 @@ for the diagram.
 | `grim: no output matched` | The output name from `niri msg -j focused-output` changed (hot-plug); re-read it. |
 | The PNG is huge / blurry | HiDPI scale is 2 or more. `grim -s 2` halves the pixels; check with `niri msg -j outputs`. |
 | `niri msg action focus-window --id N` fails | The window closed; re-list windows. Ids are per-session and change on restart. |
-| PT's **File → Save As** only offers `.pkt` | Correct — 9.0.1 cannot export an image. Use the desktop screenshot. |
+| PT's **File → Save As** only offers `.pkt` | Correct: 9.0.1 cannot export an image. Use the desktop screenshot. |
