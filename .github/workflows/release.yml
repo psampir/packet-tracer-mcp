@@ -111,11 +111,12 @@ jobs:
           # `gh` is preinstalled on GitHub-hosted runners; no action needed.
           # A re-run on the same tag must not fail just because the release
           # already exists, so upload with --clobber in that case.
+          test -f pt/packet-tracer-mcp.pts
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release ${TAG} already exists — replacing its assets."
-            gh release upload "$TAG" dist/* --clobber
+            gh release upload "$TAG" dist/* pt/packet-tracer-mcp.pts --clobber
           else
-            gh release create "$TAG" dist/* \
+            gh release create "$TAG" dist/* pt/packet-tracer-mcp.pts \
               --verify-tag \
               --title "$TAG" \
               --generate-notes

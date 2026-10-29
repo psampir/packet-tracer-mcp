@@ -7,14 +7,32 @@ on its own every time it starts: nothing here has to be repeated per session.
 > 9.0.1** on Fedora 44. Packet Tracer's Scripting UI is stable but not frozen:
 > if a label differs slightly in your build, the tab order is the same.
 
+## Quick install (bundled module)
+
+The repository ships the exported module as
+[`pt/packet-tracer-mcp.pts`](../pt/packet-tracer-mcp.pts). Importing it is the
+whole setup; name, ID, script and requested privileges travel with the file.
+
+1. Start Packet Tracer and open the lab you want to drive.
+2. **Extensions → Scripting → Configure PT Script Modules… → Add…**
+3. Select `pt/packet-tracer-mcp.pts` and click **Open**.
+4. Select `packet-tracer-mcp` in the list and click **Start**.
+5. Quit once with **File → Exit**, so PT saves the registration (see the clean-exit
+   note in §3).
+
+That is it. The numbered sections below are the manual **build-from-source** flow,
+needed only when you edit `bridge/bridge.js` or your PT build refuses the bundled
+file.
+
 ## 0. Before you start
 
 - Packet Tracer **9.0.1+** installed and licensed (this project uses only the
   documented Scripting/Extensions API).
 - The MCP server installed at `/home/pawel/Code/Projects/packet-tracer-mcp`
   (`uv sync` there once; see the [README](../README.md#development)).
-- This file open in an editor: [`bridge/bridge.js`](../bridge/bridge.js). You
-  will paste its **entire** contents into PT.
+- For the manual flow below: [`bridge/bridge.js`](../bridge/bridge.js) open in
+  an editor; you will paste its **entire** contents into PT. The bundled module
+  skips this.
 
 ## 1. Open (or create) a `.pkt`
 
@@ -213,3 +231,17 @@ which is unchanged in this release.
 2. Optionally remove the runtime directory: `rm -rf ~/.local/share/pt-mcp`.
    Nothing else on the system was touched, no service, no firewall rule, no
    network port.
+
+## 9. Rebuilding the bundled `.pts`
+
+`pt/packet-tracer-mcp.pts` is exported from PT; CI cannot generate it. Rebuild it
+whenever `bridge/bridge.js` changes:
+
+1. *Configure PT Script Modules…* → `packet-tracer-mcp` → **Edit**.
+2. **Script Engine** → replace `bridge.js` with the new file → **Apply**.
+3. **Stop → Start**.
+4. **File → Export** and save over `pt/packet-tracer-mcp.pts`.
+5. Commit the new `.pts`; the release workflow attaches it to the GitHub Release.
+
+The `.pts` is encrypted and tied to the PT build. Bump the project version when the
+bundled module changes, so the release asset and the wheel stay in step.

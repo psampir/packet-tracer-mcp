@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-10-29
+
+### Added
+
+- **Bundled Script Module** `pt/packet-tracer-mcp.pts`. Import it with
+  *Configure PT Script Modules… → Add…* and click **Start**; the name, ID,
+  script and requested privileges travel with the file. The release workflow
+  attaches it to the GitHub Release.
+
+### Changed
+
+- Setup docs lead with the bundled module. The paste-`bridge.js` flow remains as
+  the build-from-source path and for PT builds that refuse the file.
+
 ## [0.3.0] - 2026-10-29
 
 The `pt_` / `pt-mcp` shorthand is gone from the public surface: tools are called

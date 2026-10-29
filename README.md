@@ -69,18 +69,15 @@ in [docs/cli-semantics.md](docs/cli-semantics.md); the Wayland screenshot recipe
 Do this once per PT install; afterwards the module starts with PT automatically.
 
 1. Packet Tracer 9.0.1 running, with a `.pkt` open (the bridge only sees the **active** file).
-2. **Extensions → Scripting → Configure PT Script Modules… → Add**
-   - **General:** ID `com.psampir.packet-tracer-mcp`, Name `packet-tracer-mcp`, Startup **On Startup**
-   - **Script Engine:** add a file `bridge.js`, paste the whole of
-     [`bridge/bridge.js`](bridge/bridge.js), **Apply**
-   - **Security Privileges:** **Application**, **File Operations**, **Get Network Info**,
-     **Change Network Info** (plus **Miscellaneous UI** if you want `[pt-mcp]` log lines)
-3. **Save**, then select the module and click **Start**.
-4. Check `~/.local/share/pt-mcp/{jobs,results}` exists; PT's log shows
-   `[pt-mcp] bridge ready (home=…)`.
+2. **Extensions → Scripting → Configure PT Script Modules… → Add…** and select
+   [`pt/packet-tracer-mcp.pts`](pt/packet-tracer-mcp.pts).
+3. Select `packet-tracer-mcp` and click **Start**.
+4. Quit once with **File → Exit**, so PT saves the registration.
 
-Click-by-click version, including how to force a rescan when the file watcher stays silent:
-**[docs/setup.md](docs/setup.md)**.
+The bundled `.pts` carries the name, ID, script and requested privileges; there is nothing
+to paste. The manual build-from-source flow (paste `bridge.js`, set the name/ID and
+privileges) lives in **[docs/setup.md](docs/setup.md)**, together with the rescan and
+recovery procedures.
 
 ## Connect the MCP client
 
