@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **The repository is public.** Install and update no longer need SSH or a
+  collaborator invite:
+  `uv tool install "git+https://github.com/psampir/packet-tracer-mcp.git@main"`.
+  The README documents `--force` reinstall, `uv tool upgrade` and the
+  `uvx --from git+…` one-off.
+
+### Added
+
+- `tests/test_changelog.py` fails in CI when `pyproject.toml` has no matching
+  CHANGELOG section, or when the newest released section is not the project
+  version. The release workflow depends on both.
+
 ## [0.3.2] - 2026-10-29
 
 ### Fixed
