@@ -316,6 +316,7 @@ def test_pt_get_config_reads_every_port(fake, jload) -> None:
     assert "getPortAt" in js
     assert "isDhcpClientOn" in js
     assert "getIpv6Addresses" in js
+    assert "v6text" in js, "IPv6 entries are formatted as address/prefix"
 
 
 def test_pt_get_config_reads_a_single_port(fake, jload) -> None:
@@ -450,6 +451,8 @@ def test_pt_set_ipv6_enables_and_adds_the_address(fake, jload) -> None:
     assert "setIpv6Enabled(true)" in js
     assert 'addIpv6Address("2001:db8::10", 64, 0, false)' in js
     assert "setv6DefaultGateway" not in js
+    assert "v6text" in js, "entries are formatted as address/prefix, not [object Object]"
+    assert "entry.address" in js
 
 
 def test_pt_set_ipv6_sets_the_default_gateway(fake, jload) -> None:
@@ -569,7 +572,7 @@ def test_pt_dns_record_removes_both_entries(fake, jload) -> None:
     assert result["enabled"] is False
     js = fake.last_js()
     assert 'removeIpAddress("www.g4.lab")' in js
-    assert 'removeARecordFromNameServerDb("www.g4.lab")' in js
+    assert 'removeARecordFromNameServerDb("www.g4.lab", "192.168.20.10")' in js
     assert "addIpAddress" not in js
     assert "addSOAToNameServerDb" not in js
 
@@ -646,6 +649,17 @@ def test_pt_http_page_keeps_the_page_when_no_content_is_given(fake, jload) -> No
     js = fake.last_js()
     assert "setEnable(false)" in js
     assert "setPageContents" not in js
+
+
+def test_pt_http_page_disable_does_not_query_the_disabled_server(fake, jload) -> None:
+    """isEnabled()/getPage() after setEnable(false) takes Packet Tracer down."""
+    fake.eval_answers = [{"path": "index.html", "enabled": False, "page": ""}]
+
+    result = jload(server.pt_http_page("Server-DNS", enable=False))
+
+    assert result["enabled"] is False
+    js = fake.last_js()
+    assert "if (false)" in js, "a disabled HttpServer must not be queried"
 
 
 def test_pt_http_page_rejects_a_non_object(fake, jload) -> None:

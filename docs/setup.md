@@ -82,6 +82,12 @@ makes the matching op fail with a privilege/access-denied error:
    # jobs  results  saved
    ```
 
+> **Quit Packet Tracer cleanly.** The module registration lives in PT's profile
+> and is written on **`File → Exit`**. A crash or a killed process loses it: the
+> next launch starts with an empty module list, so nothing auto-starts. If that
+> happens, re-add `ptmcp.pts` and quit cleanly once — after that it starts with
+> PT.
+
 ## 4. Check it from the server side
 
 ```fish
@@ -173,6 +179,8 @@ Those are configuration problems — the error message says which one.
 5. If the module does not come back, or the first call still behaves like the old
    script, re-paste and Stop → Start again; a half-replaced file is the usual
    cause.
+6. **Quit with `File → Exit`** after the change. A crash or `kill` loses the
+   module registration (see the note in §3).
 
 The CLI/mode rules the new file implements are documented in
 [cli-semantics.md](cli-semantics.md) — worth a skim before the first

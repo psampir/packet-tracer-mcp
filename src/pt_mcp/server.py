@@ -428,6 +428,19 @@ def _device_js(device: str) -> str:
 _GET_CONFIG_JS = string.Template(
     """$marker(function () {
     $lookup
+    function v6text(entry) {
+        if (entry === null || typeof entry === "undefined") { return ""; }
+        if (typeof entry === "string") { return entry; }
+        var addr = entry.address;
+        if (addr !== null && typeof addr !== "undefined") {
+            var prefix = entry.prefix;
+            if (prefix !== null && typeof prefix !== "undefined") {
+                return String(addr) + "/" + String(prefix);
+            }
+            return String(addr);
+        }
+        return String(entry);
+    }
     function readPort(port, index) {
         var name = "Port" + index;
         var ip = "";
@@ -444,9 +457,9 @@ _GET_CONFIG_JS = string.Template(
             var rawV6 = port.getIpv6Addresses();
             if (rawV6) {
                 if (typeof rawV6.length === "number") {
-                    for (var j = 0; j < rawV6.length; j += 1) { v6.push(String(rawV6[j])); }
+                    for (var j = 0; j < rawV6.length; j += 1) { v6.push(v6text(rawV6[j])); }
                 } else {
-                    v6.push(String(rawV6));
+                    v6.push(v6text(rawV6));
                 }
             }
         } catch (e6) { v6 = []; }
@@ -482,14 +495,27 @@ _SET_IPV6_JS = string.Template(
     port.setIpv6Enabled(true);
     port.addIpv6Address($address, $prefix, 0, false);
 $gateway
+    function v6text(entry) {
+        if (entry === null || typeof entry === "undefined") { return ""; }
+        if (typeof entry === "string") { return entry; }
+        var addr = entry.address;
+        if (addr !== null && typeof addr !== "undefined") {
+            var prefix = entry.prefix;
+            if (prefix !== null && typeof prefix !== "undefined") {
+                return String(addr) + "/" + String(prefix);
+            }
+            return String(addr);
+        }
+        return String(entry);
+    }
     var v6 = [];
     try {
         var rawV6 = port.getIpv6Addresses();
         if (rawV6) {
             if (typeof rawV6.length === "number") {
-                for (var j = 0; j < rawV6.length; j += 1) { v6.push(String(rawV6[j])); }
+                for (var j = 0; j < rawV6.length; j += 1) { v6.push(v6text(rawV6[j])); }
             } else {
-                v6.push(String(rawV6));
+                v6.push(v6text(rawV6));
             }
         }
     } catch (e2) { v6 = []; }
@@ -542,8 +568,15 @@ _HTTP_PAGE_JS = string.Template(
     http.setEnable($enabled);
 $content
     var result = {path: $path, enabled: $enabled, page: ""};
-    try { result.enabled = !!http.isEnabled(); } catch (e2) { result.enabled = $enabled; }
-    try { result.page = String(http.getPage($path)); } catch (e3) { result.page = ""; }
+    if ($enabled) {
+        try { result.enabled = !!http.isEnabled(); } catch (e2) { result.enabled = true; }
+        try { result.page = String(http.getPage($path)); } catch (e3) { result.page = ""; }
+    } else {
+        /* A disabled HttpServer must not be queried: isEnabled()/getPage()
+         * after setEnable(false) takes Packet Tracer down. */
+        result.enabled = false;
+        result.page = "";
+    }
     return result;
 }())"""
 )
@@ -824,7 +857,7 @@ def _dns_record(
             f"    try {{ result.ip_entry = !!dns.removeIpAddress({name_lit}); }}\n"
             "    catch (e2) { throw new Error(\"removeIpAddress failed: \" + String(e2)); }\n"
             "    try { result.a_record = !!dns.removeARecordFromNameServerDb("
-            f"{name_lit}); }}\n"
+            f"{name_lit}, {ip_lit}); }}\n"
             "    catch (e3) { throw new Error(\"removeARecordFromNameServerDb failed: \""
             " + String(e3)); }"
         )
