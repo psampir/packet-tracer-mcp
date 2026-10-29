@@ -481,6 +481,9 @@ function loadBridge() {
     getActiveWorkspace() {
       return { getLogicalWorkspace: () => logicalWorkspace };
     },
+    getUserFolder() {
+      return "/home/test/pt";
+    },
     fileSaveAsNoPrompt(p, flag) {
       saves.push({ path: String(p), flag: !!flag });
       return true;

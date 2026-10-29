@@ -84,9 +84,9 @@ or with Pillow, when you want the coordinates in a script:
 ```python
 from PIL import Image
 
-shot = Image.open("/home/pawel/pt-shots/full.png")
+shot = Image.open("shot-full.png")
 window = shot.crop((300, 120, 300 + 1091, 120 + 1192))
-window.save("/home/pawel/pt-shots/pt-window.png")
+window.save("shot-pt-window.png")
 ```
 
 For a quick "PT is the only window on a flat background" grab, `magick full.png

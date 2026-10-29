@@ -30,7 +30,11 @@
  * NOTE: the bridge always acts on whichever .pkt is currently ACTIVE in PT.
  * ========================================================================== */
 
-var PT_MCP_HOME = "/home/pawel/.local/share/pt-mcp";
+/* The mailbox lives inside Packet Tracer's own user folder (``~/pt`` on Linux,
+ * "Documents" on Windows), so the module works for any user without editing
+ * this file. The server's DEFAULT_HOME mirrors the Linux value; set
+ * PT_MCP_HOME on both sides on a platform where they differ. */
+var PT_MCP_HOME = String(ipc.appWindow().getUserFolder()) + "/pt-mcp";
 var PT_MCP_JOBS = PT_MCP_HOME + "/jobs";
 var PT_MCP_RESULTS = PT_MCP_HOME + "/results";
 

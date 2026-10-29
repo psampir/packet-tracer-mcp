@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-10-29
+
+### Fixed
+
+- **The Script Module is portable.** `bridge.js` no longer hard-codes
+  `/home/pawel/.local/share/pt-mcp`; it builds the mailbox from Packet Tracer's
+  own user folder (`ipc.appWindow().getUserFolder() + "/pt-mcp"`), which is
+  `~/pt/pt-mcp` on Linux. The module imported from the release asset now works
+  for any user, with no edit before `Start`.
+- `pt_mcp.config.DEFAULT_HOME` follows the same rule (`~/pt/pt-mcp`), and a test
+  fails if `bridge.js` grows a literal home directory again.
+
+### Changed
+
+- The old runtime directory `~/.local/share/pt-mcp` is no longer used by default.
+  Point `PT_MCP_HOME` at it on both sides to keep the previous location, or move
+  the lab output and delete it.
+- **The bundled `.pts` must be re-imported** (or its script replaced and the
+  module restarted), because the module and the server have to agree on the
+  directory. Mixing 0.3.1 and 0.3.2 times out.
+
 ## [0.3.1] - 2026-10-29
 
 ### Added
