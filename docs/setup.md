@@ -29,8 +29,14 @@ file.
 
 - Packet Tracer **9.0.1+** installed and licensed (this project uses only the
   documented Scripting/Extensions API).
-- The MCP server installed at `/home/pawel/Code/Projects/packet-tracer-mcp`
-  (`uv sync` there once; see the [README](../README.md#development)).
+- The MCP server installed globally:
+
+  ```sh
+  uv tool install "git+ssh://git@github.com/psampir/packet-tracer-mcp.git@main"
+  ```
+
+  This puts `packet-tracer-mcp` on `PATH`. For development, a checkout with
+  `uv run --directory …` works too.
 - For the manual flow below: [`bridge/bridge.js`](../bridge/bridge.js) open in
   an editor; you will paste its **entire** contents into PT. The bundled module
   skips this.

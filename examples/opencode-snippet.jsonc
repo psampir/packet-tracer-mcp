@@ -1,18 +1,13 @@
 {
-  // Paste the "packet-tracer" block below into ~/.config/opencode/opencode.jsonc
-  // under the existing "mcp" -> "servers" object. Do not duplicate keys.
-  // Adjust paths if you moved the project (the command runs the installed
-  // console script, so no PEP 723 header is needed any more).
+  // Install once:
+  //   uv tool install "git+ssh://git@github.com/psampir/packet-tracer-mcp.git@main"
+  // Then paste the "packet-tracer" block below into
+  // ~/.config/opencode/opencode.jsonc under the existing "mcp" -> "servers"
+  // object. Do not duplicate keys. The command is on PATH, so no checkout path
+  // or `cwd` is needed.
   "packet-tracer": {
     "type": "local",
-    "command": [
-      "uv",
-      "run",
-      "--directory",
-      "/home/pawel/Code/Projects/packet-tracer-mcp",
-      "packet-tracer-mcp"
-    ],
-    "cwd": "/home/pawel/Code/Projects/packet-tracer-mcp",
+    "command": ["packet-tracer-mcp"],
     "disabled": false
   }
 }

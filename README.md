@@ -64,6 +64,18 @@ wedged console in [docs/setup.md](docs/setup.md); the CLI/mode rules, readiness 
 in [docs/cli-semantics.md](docs/cli-semantics.md); the Wayland screenshot recipe in
 [docs/screenshot.md](docs/screenshot.md).
 
+## Install
+
+```sh
+uv tool install "git+ssh://git@github.com/psampir/packet-tracer-mcp.git@main"
+```
+
+This installs the `packet-tracer-mcp` console script into `~/.local/bin`, so neither the
+MCP configuration nor the PT setup needs a repository path. For development, use a
+checkout instead: `uv run --directory /path/to/packet-tracer-mcp packet-tracer-mcp`.
+
+Update later with `uv tool install --force "…@main"`.
+
 ## One-time Packet Tracer setup
 
 Do this once per PT install; afterwards the module starts with PT automatically.
@@ -88,17 +100,22 @@ recovery procedures.
 ```jsonc
 "packet-tracer": {
   "type": "local",
-  "command": ["uv", "run", "--directory", "/home/pawel/Code/Projects/packet-tracer-mcp", "packet-tracer-mcp"],
-  "cwd": "/home/pawel/Code/Projects/packet-tracer-mcp",
+  "command": ["packet-tracer-mcp"],
   "disabled": false
 }
 ```
 
-`uv run` resolves the locked environment on first use; the command runs the `packet-tracer-mcp`
-console script. Any stdio MCP client works the same way:
+`packet-tracer-mcp` is on `PATH` after the `uv tool install` above. Any stdio MCP client
+works the same way:
 
 ```sh
-uv run --directory /home/pawel/Code/Projects/packet-tracer-mcp packet-tracer-mcp
+packet-tracer-mcp
+```
+
+For a source checkout instead of the global tool:
+
+```sh
+uv run --directory /path/to/packet-tracer-mcp packet-tracer-mcp
 ```
 
 Set `PT_MCP_HOME` if the bridge watches a different directory, and `PT_MCP_TIMEOUT` (default `120`
@@ -172,7 +189,7 @@ types into the shell when you need the host's own output, and `ping` turns it in
 ## Development
 
 ```sh
-cd /home/pawel/Code/Projects/packet-tracer-mcp
+cd /path/to/packet-tracer-mcp
 uv sync --extra dev
 uv run pytest                                        # 200 Python tests, all offline
 uv run pytest --cov=pt_mcp --cov-report=term-missing  # same run, 100% line coverage (gate: 85%)
