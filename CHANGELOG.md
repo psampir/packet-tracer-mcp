@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`tools/live_smoke.py`** — a live integration smoke test that builds a
+  throw-away lab in the active `.pkt`, exercises the real IPC paths (boot wizard,
+  DHCP, IPv6, DNS/HTTP, routing, CLI errors, power/skip_boot) and removes every
+  device afterwards. 16 checks; not part of CI.
+
 ### Fixed
 
 - **`pt_dns_list()` without a name returned `[object Object]` for every entry.**

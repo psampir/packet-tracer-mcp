@@ -176,7 +176,7 @@ types into the shell when you need the host's own output, and `pt_ping` turns it
 ```sh
 cd /home/pawel/Code/Projects/packet-tracer-mcp
 uv sync --extra dev
-uv run pytest                                        # 197 Python tests, all offline
+uv run pytest                                        # 200 Python tests, all offline
 uv run pytest --cov=pt_mcp --cov-report=term-missing  # same run, 100% line coverage (gate: 85%)
 node --test tests/bridge/*.test.js                   # 76 Node tests against the real bridge.js
 uv run ruff check .                                  # lint
@@ -197,6 +197,25 @@ suite and `pytest` under an **85% line-coverage gate** on `pt_mcp`
 (`[tool.coverage.report] fail_under` plus `--cov-fail-under` in the workflow). Lower
 the coverage only by adding tests, not by moving the threshold.
 
+### Live smoke test (needs Packet Tracer)
+
+`tools/live_smoke.py` builds a throw-away lab in the active `.pkt` and exercises
+the paths only real PT can answer: add/link/list, prompt-aware configure
+(including the IOS setup wizard and a rejected line), static IPv4/IPv6, DHCP,
+DNS (A + SOA/NS), HTTP enable/keep/disable, ping success/failure, `pt_raw`,
+`pt_skip_boot`, a power-cycle and `pt_save`. It removes every device it created,
+even when a check fails.
+
+```sh
+uv run python tools/live_smoke.py            # fast; routers use skip_boot
+uv run python tools/live_smoke.py --slow     # + a full-boot router
+uv run python tools/live_smoke.py --keep     # leave the lab for inspection
+uv run python tools/live_smoke.py --verbose  # every device operation
+```
+
+It is **not** part of CI: it needs a running PT and the Script Module. A full run
+on PT 9.0.1.0858 passes **16/16 checks**.
+
 Layout:
 
 | Path | Purpose |
@@ -208,6 +227,7 @@ Layout:
 | `bridge/bridge.js` | the ES5 script that runs **inside** Packet Tracer |
 | `tests/fake_bridge.py` | protocol-compatible stand-in bridge for the Python suite |
 | `tests/bridge/` | Node harness + tests that load the real `bridge.js` into `node:vm` |
+| `tools/live_smoke.py` | live integration smoke test against a running Packet Tracer |
 | `docs/` | [architecture](docs/architecture.md), [setup](docs/setup.md), [protocol](docs/protocol.md), [cli semantics](docs/cli-semantics.md), [screenshots](docs/screenshot.md) |
 
 `bridge/bridge.js` is deliberately frozen ES5 (QtScript: `var`/`function` only, no `let`, arrows,
