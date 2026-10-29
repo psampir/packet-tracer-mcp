@@ -48,8 +48,17 @@ _NOT_SET_UP = (
 
 
 def not_set_up(base: object) -> str:
-    """Return the "bridge was never set up" text for ``base``."""
-    return _NOT_SET_UP.format(base=base)
+    """Return the "bridge was never set up" text for ``base``, with a fix hint."""
+    text = _NOT_SET_UP.format(base=base)
+    other = config.other_live_mailbox()
+    if other is not None:
+        # The client can start before the Script Module, so the module may have
+        # created its mailbox somewhere this process never looked.
+        text += (
+            f"\nA live mailbox exists at {other}: the Script Module is running there.\n"
+            f"Set PT_MCP_HOME={other} and restart the MCP client.\n"
+        )
+    return text
 
 
 class PTBridgeError(RuntimeError):

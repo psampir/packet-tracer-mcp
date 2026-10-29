@@ -408,6 +408,40 @@ def test_main_runs_the_stdio_server(monkeypatch: pytest.MonkeyPatch) -> None:
     transports: list[str] = []
     monkeypatch.setattr(server.server, "run", transports.append)
 
-    server.main()
+    server.main([])
 
     assert transports == ["stdio"]
+
+
+# --------------------------------------------------------------------------
+# the "never set up" text
+# --------------------------------------------------------------------------
+def test_not_set_up_names_the_expected_directory() -> None:
+    text = protocol.not_set_up("/nowhere/pt-mcp")
+
+    assert "/nowhere/pt-mcp" in text
+    assert "mkdir -p /nowhere/pt-mcp/jobs" in text
+
+
+def test_not_set_up_points_at_a_live_mailbox_elsewhere(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The client may start before the module, which then creates its mailbox."""
+    other = tmp_path / "Documents" / "pt-mcp"
+    monkeypatch.setattr(protocol.config, "other_live_mailbox", lambda *a: other)
+
+    text = protocol.not_set_up("/nowhere/pt-mcp")
+
+    assert str(other) in text
+    assert f"Set PT_MCP_HOME={other}" in text
+    assert "restart the MCP client" in text
+
+
+def test_not_set_up_stays_short_when_nothing_else_lives(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(protocol.config, "other_live_mailbox", lambda *a: None)
+
+    text = protocol.not_set_up("/nowhere/pt-mcp")
+
+    assert "A live mailbox exists" not in text

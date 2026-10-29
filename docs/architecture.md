@@ -97,7 +97,7 @@ and needs no credential, only the PT privileges you granted the module (see
 | **MCP client (agent)** | opencode / Claude / any stdio client | Turns user intent into tool calls; never sees a file path. |
 | **`pt_mcp.server`** | `src/pt_mcp/server.py` | Twenty-two MCP tools over stdio; splits input, waits for a usable prompt, generates the host/topology JS that rides the `eval` op, renders every failure as `{"ok": false, "error": …}`. |
 | **Transport** | `src/pt_mcp/protocol.py`, `src/pt_mcp/config.py` | Atomic job write, 50 ms polling, stale-id detection, cleanup on success and on timeout. |
-| **Mailbox** | `$PT_MCP_HOME/{jobs,results,saved}` | The only shared state. Defaults to `~/pt/pt-mcp`, derived by the bridge from PT's own user folder. |
+| **Mailbox** | `$PT_MCP_HOME/{jobs,results,saved}` | The only shared state. Resolved by `pt_mcp.config.inspect`: the first candidate (`~/pt/pt-mcp`, `~/Documents/pt-mcp`, versioned `Packet Tracer*` folders) that already holds `jobs/` and `results/`, with `PT_MCP_HOME` overriding. Reported by `--doctor`. |
 | **`bridge/bridge.js`** | inside Packet Tracer (Script Module `com.psampir.packet-tracer-mcp`) | File watcher + job dedupe + op dispatch; the only code that touches the PT API. |
 | **PT API** | `ipc.network()`, `ipc.appWindow().getActiveWorkspace().getLogicalWorkspace()`, `CiscoDevice`/`ConsoleLine` | The actual capability: devices, links, console input, save, version. |
 | **The `.pkt`** | Packet Tracer's active window | The lab being configured. The bridge only ever sees the active one. |

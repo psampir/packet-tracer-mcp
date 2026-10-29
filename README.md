@@ -98,6 +98,22 @@ deliberate version bump. After updating, restart the MCP client so it launches t
 binary. The Script Module in PT is separate: it only needs re-importing when a release
 says so (the mailbox path is part of that contract).
 
+### Where the mailbox lives
+
+`bridge.js` inside Packet Tracer computes the directory as
+`getUserFolder() + "/pt-mcp"`, so it needs no configuration. The server has to find the
+same directory without asking PT, so it tries `~/pt/pt-mcp` (Linux), `~/Documents/pt-mcp`,
+`~/Documents/Packet Tracer*/pt-mcp` and
+`~/Library/Application Support/Packet Tracer*/pt-mcp` (macOS) in that order, and uses the
+first one the module has already created. `PT_MCP_HOME` overrides the search on both
+sides.
+
+To see what was resolved, and what the bridge has done there:
+
+```sh
+packet-tracer-mcp --doctor
+```
+
 ## One-time Packet Tracer setup
 
 Do this once per PT install; afterwards the module starts with PT automatically.
@@ -193,7 +209,7 @@ types into the shell when you need the host's own output, and `ping` turns it in
 | Symptom | Cause / fix |
 |---|---|
 | `Timed out … Packet Tracer is not responding` | PT not running, no `.pkt` open, or the Script Module stopped. Open a lab, then **Extensions → Scripting → Configure PT Script Modules… → `com.psampir.packet-tracer-mcp` → Start**. |
-| `bridge was never set up: base dir … does not exist` | The module has never run, so `~/pt/pt-mcp` was never created. Start it once (or click **Run File**). |
+| `bridge was never set up: base dir … does not exist` | The module has never run, so `~/pt/pt-mcp` was never created. Start it once (or click **Run File**), then run `packet-tracer-mcp --doctor`: it lists every candidate, and the error already names a live mailbox when the module created its directory somewhere else. |
 | Jobs appear in `jobs/` but nothing answers | The file watcher isn't firing: click **Run File** in the Scripting interface to force a rescan. Also check the `PT_MCP_HOME` constant at the top of `bridge.js` matches the server's. |
 | Privilege / access-denied errors in PT | Re-open the module's **Security Privileges** tab, enable **Application**, **File Operations** and **Get/Change Network Info**, then Stop → Start. |
 | `device not found: X` | The name is wrong, or the device lives in a different (non-active) `.pkt`: the bridge only sees the active window. |

@@ -37,13 +37,18 @@ so an LLM client always gets something it can act on instead of a traceback.
 
 Transport: stdio only — ``main()`` starts the server with
 ``server.run("stdio")`` and prints nothing, so the stream stays clean for the
-JSON-RPC handshake.
+JSON-RPC handshake. ``main(["--doctor"])`` prints the mailbox resolution
+(:mod:`pt_mcp.doctor`) instead of starting anything.
 """
 
 from __future__ import annotations
 
+import argparse
+import sys
+
 # Importing the tool modules is what registers the twenty-two tools on
 # ``server``; the names below are re-exported for callers and tests.
+from . import __version__, config, doctor
 from .eval import _api_error, _eval  # noqa: F401 - re-exported with the tools
 from .readiness import READY_POLL_INTERVAL, READY_TIMEOUT, wait_ready  # noqa: F401
 from .registry import server
@@ -93,8 +98,31 @@ __all__ = [
 # --------------------------------------------------------------------------
 # Entry point
 # --------------------------------------------------------------------------
-def main() -> None:
-    """Run the MCP server over stdio (the only transport this project ships)."""
+def main(argv: list[str] | None = None) -> None:
+    """Run the MCP server over stdio, or describe the mailbox with ``--doctor``."""
+    parser = argparse.ArgumentParser(
+        prog="packet-tracer-mcp",
+        description="MCP server for Cisco Packet Tracer's Script Module bridge.",
+    )
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="print the resolved mailbox, its candidates and the bridge's last "
+        "answer, then exit (non-zero when no mailbox exists yet)",
+    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    args = parser.parse_args(argv)
+
+    if args.doctor:
+        raise SystemExit(doctor.main())
+
+    if len(config.MAILBOX.live) > 1:
+        print(
+            "packet-tracer-mcp: several live mailboxes: "
+            + ", ".join(str(path) for path in config.MAILBOX.live)
+            + f"; using {config.MAILBOX.path}. Set PT_MCP_HOME to choose.",
+            file=sys.stderr,
+        )
     server.run("stdio")
 
 
