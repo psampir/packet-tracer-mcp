@@ -56,11 +56,11 @@ _EXEC_VERBS = {
 
 #: Canned answers for the snippets the server generates for its host/topology
 #: tools. ``fake_bridge.py`` has no JavaScript engine, so it recognises the
-#: ``/* pt-mcp: <tool> */`` marker at the top of each snippet and answers with
+#: ``/* packet-tracer-mcp: <tool> */`` marker at the top of each snippet and answers with
 #: plausible data; the real bridge evaluates the script instead. Anything
-#: without a marker (i.e. ``pt_raw``) is echoed back as text.
+#: without a marker (i.e. ``raw``) is echoed back as text.
 _EVAL_CANNED = {
-    "/* pt-mcp: pt_get_config */": [
+    "/* packet-tracer-mcp: get_config */": [
         {
             "name": "FastEthernet0",
             "ip": "192.168.10.10",
@@ -70,20 +70,20 @@ _EVAL_CANNED = {
             "up": True,
         }
     ],
-    "/* pt-mcp: pt_set_ip */": {
+    "/* packet-tracer-mcp: set_ip */": {
         "port": "FastEthernet0",
         "ip": "192.168.10.10",
         "mask": "255.255.255.0",
         "dhcp": False,
     },
-    "/* pt-mcp: pt_set_ipv6 */": {
+    "/* packet-tracer-mcp: set_ipv6 */": {
         "port": "FastEthernet0",
         "address": "2001:db8::10",
         "prefix": 64,
         "gateway": "2001:db8::1",
         "ipv6": ["2001:db8::10/64"],
     },
-    "/* pt-mcp: pt_dns_record */": {
+    "/* packet-tracer-mcp: dns_record */": {
         "name": "www.g4.lab",
         "ip": "192.168.20.10",
         "zone": "g4.lab",
@@ -96,13 +96,13 @@ _EVAL_CANNED = {
         "a_record": True,
         "entries": 1,
     },
-    "/* pt-mcp: pt_dns_list */": {"count": 1, "entries": ["www.g4.lab 192.168.20.10"]},
-    "/* pt-mcp: pt_http_page */": {
+    "/* packet-tracer-mcp: dns_list */": {"count": 1, "entries": ["www.g4.lab 192.168.20.10"]},
+    "/* packet-tracer-mcp: http_page */": {
         "path": "index.html",
         "enabled": True,
         "page": "<h1>pt-mcp fake server</h1>",
     },
-    "/* pt-mcp: pt_list_links */": [
+    "/* packet-tracer-mcp: list_links */": [
         {
             "a": "R1",
             "a_port": "GigabitEthernet0/0",
@@ -112,7 +112,7 @@ _EVAL_CANNED = {
             "up": True,
         }
     ],
-    "/* pt-mcp: pt_list_ports */": [
+    "/* packet-tracer-mcp: list_ports */": [
         {
             "name": "FastEthernet0",
             "up": True,
@@ -122,8 +122,8 @@ _EVAL_CANNED = {
             "link": "SW1 FastEthernet0/1",
         }
     ],
-    "/* pt-mcp: pt_pc_command len */": 0,
-    "/* pt-mcp: pt_pc_command output */": (
+    "/* packet-tracer-mcp: pc_command len */": 0,
+    "/* packet-tracer-mcp: pc_command output */": (
         "Pinging 192.168.10.1 with 32 bytes of data:\n\n"
         "Reply from 192.168.10.1: bytes=32 time=1ms TTL=128\n"
         "Reply from 192.168.10.1: bytes=32 time=1ms TTL=128\n"
@@ -136,7 +136,7 @@ _EVAL_CANNED = {
 
 
 def _eval_canned(js: str):
-    """Answer a server-generated snippet, or echo it back (``pt_raw``)."""
+    """Answer a server-generated snippet, or echo it back (``raw``)."""
     for marker, payload in _EVAL_CANNED.items():
         if marker in js:
             return {"value": json.dumps(payload, ensure_ascii=False)}

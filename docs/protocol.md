@@ -22,7 +22,7 @@ in, one file out, one request id per call.
 |---|---|---|---|
 | `<base>/jobs/` | server | bridge | one request per call |
 | `<base>/results/` | bridge | server | one response per call |
-| `<base>/saved/` | server | — | default target for `pt_save` |
+| `<base>/saved/` | server | — | default target for `save` |
 
 `<base>` is `$PT_MCP_HOME`, default `/home/pawel/.local/share/pt-mcp`. The bridge
 hard-codes the same default at the top of `bridge.js`; the two values must match,
@@ -69,21 +69,21 @@ tool renders that as `{"ok": false, "error": "Packet Tracer bridge error for op
 
 | Op | `args` | `result` | MCP tool |
 |---|---|---|---|
-| `ping` | — | `{"version": "9.0.1…", "deviceCount": N}` | `pt_status` |
-| `list_devices` | — | `{"devices": [{name, type, typeName, model}], "links": N}` | `pt_list_devices` |
-| `add_device` | `{name, type, model, x, y}` | `{"name": "<actual name>", "ready": bool}` | `pt_add_device` |
-| `remove_device` | `{name}` | `{"removed": true\|false}` | `pt_remove_device` |
-| `link` | `{a, aPort, b, bPort, cable}` | `{"linked": true}` | `pt_link` |
-| `autolink` | `{a, b}` | `{"ok": true}` | `pt_autolink` |
+| `ping` | — | `{"version": "9.0.1…", "deviceCount": N}` | `status` |
+| `list_devices` | — | `{"devices": [{name, type, typeName, model}], "links": N}` | `list_devices` |
+| `add_device` | `{name, type, model, x, y}` | `{"name": "<actual name>", "ready": bool}` | `add_device` |
+| `remove_device` | `{name}` | `{"removed": true\|false}` | `remove_device` |
+| `link` | `{a, aPort, b, bPort, cable}` | `{"linked": true}` | `link` |
+| `autolink` | `{a, b}` | `{"ok": true}` | `autolink` |
 | `get_state` | `{device}` | `{"name", "prompt", "mode", "booting", "hasIos", "type", "model"}` | — (used by `wait_ready`) |
-| `plan` | `{device, lines, mode, keep_session}` | `{"lines": [string], "mode": "auto", "effective_mode": "raw"\|"exec"\|"config", "prompt", "booting"}` | `pt_configure(dry_run=True)` |
-| `configure` | `{device, lines, mode, keep_session, stop_on_error, timeout_ms}` | `{"prompt", "lines": [{line, prompt, output, ok}], "output", "stopped_on", "ok", "mode", "effective_mode"}` | `pt_configure` |
-| `exec` | `{device, command, timeout_ms}` | same shape as `configure`, `effective_mode: "exec"` | `pt_show` |
+| `plan` | `{device, lines, mode, keep_session}` | `{"lines": [string], "mode": "auto", "effective_mode": "raw"\|"exec"\|"config", "prompt", "booting"}` | `configure(dry_run=True)` |
+| `configure` | `{device, lines, mode, keep_session, stop_on_error, timeout_ms}` | `{"prompt", "lines": [{line, prompt, output, ok}], "output", "stopped_on", "ok", "mode", "effective_mode"}` | `configure` |
+| `exec` | `{device, command, timeout_ms}` | same shape as `configure`, `effective_mode: "exec"` | `show` |
 | `show` | `{device, command}` | alias of `exec`, kept for older clients | — |
-| `power` | `{device, on: bool}` | `{"ok": true}` | `pt_power` |
-| `skip_boot` | `{device}` | `{"ok": true}` | `pt_skip_boot`, `pt_add_device(skip_boot=True)` |
-| `save` | `{path}` | `{"saved": true, "path": "…"}` | `pt_save` |
-| `eval` | `{js}` | `{"value": "<stringified>"}` | `pt_raw` and every host/topology tool (server-side, see below) |
+| `power` | `{device, on: bool}` | `{"ok": true}` | `power` |
+| `skip_boot` | `{device}` | `{"ok": true}` | `skip_boot`, `add_device(skip_boot=True)` |
+| `save` | `{path}` | `{"saved": true, "path": "…"}` | `save` |
+| `eval` | `{js}` | `{"value": "<stringified>"}` | `raw` and every host/topology tool (server-side, see below) |
 
 `mode` in `plan`/`configure` is `auto` (default), `raw`, `exec` or `config`; the
 bridge resolves it against the device's prompt and reports the outcome as
@@ -111,16 +111,16 @@ op that has always existed:
 
 | Tool | PT API it touches |
 |---|---|
-| `pt_get_config` | `Port.getIpAddress/getSubnetMask/isDhcpClientOn/getIpv6Addresses/isPortUp` |
-| `pt_set_ip` | `Port.setIpSubnetMask(ip, mask)` (**ip first**), `setDefaultGateway`, `setDnsServerIp`, `setDhcpClientFlag`, `Device.getProcess("DhcpClient").dhcpRun(port)` |
-| `pt_set_ipv6` | `Port.setIpv6Enabled(true)`, `addIpv6Address(addr, prefix, 0, false)`, `setv6DefaultGateway` |
-| `pt_dns_record` / `pt_dns_list` | `Device.getProcess("DnsServer")`: `addIpAddress` **and** `addARecordToNameServerDb`, `addSOAToNameServerDb`, `addNSRecordToNameServerDb`, `removeIpAddress`, `removeARecordFromNameServerDb`, `getEntryCount/getEntryAt/getIpAddOfDomain` |
-| `pt_http_page` | `Device.getProcess("HttpServer")`: `setEnable`, `isEnabled`, `setPageContents`, `getPage` |
-| `pt_pc_command` / `pt_ping` | `Device.getCommandLine().getOutput()` plus the `exec` op for the keystrokes |
-| `pt_list_links` | `Port.getLink()` → `Cable.getPort1/getPort2/getConnectionType`, `Port.isPortUp` |
-| `pt_list_ports` | `Device.getPortCount/getPortAt`, `Port.getName/isPortUp/isProtocolUp/getLink` |
+| `get_config` | `Port.getIpAddress/getSubnetMask/isDhcpClientOn/getIpv6Addresses/isPortUp` |
+| `set_ip` | `Port.setIpSubnetMask(ip, mask)` (**ip first**), `setDefaultGateway`, `setDnsServerIp`, `setDhcpClientFlag`, `Device.getProcess("DhcpClient").dhcpRun(port)` |
+| `set_ipv6` | `Port.setIpv6Enabled(true)`, `addIpv6Address(addr, prefix, 0, false)`, `setv6DefaultGateway` |
+| `dns_record` / `dns_list` | `Device.getProcess("DnsServer")`: `addIpAddress` **and** `addARecordToNameServerDb`, `addSOAToNameServerDb`, `addNSRecordToNameServerDb`, `removeIpAddress`, `removeARecordFromNameServerDb`, `getEntryCount/getEntryAt/getIpAddOfDomain` |
+| `http_page` | `Device.getProcess("HttpServer")`: `setEnable`, `isEnabled`, `setPageContents`, `getPage` |
+| `pc_command` / `ping` | `Device.getCommandLine().getOutput()` plus the `exec` op for the keystrokes |
+| `list_links` | `Port.getLink()` → `Cable.getPort1/getPort2/getConnectionType`, `Port.isPortUp` |
+| `list_ports` | `Device.getPortCount/getPortAt`, `Port.getName/isPortUp/isProtocolUp/getLink` |
 
-Each snippet starts with a `/* pt-mcp: <tool> */` comment and returns JSON, so the
+Each snippet starts with a `/* packet-tracer-mcp: <tool> */` comment and returns JSON, so the
 `value` of the `eval` result carries one more JSON layer; the server parses it
 twice while it is still a string. A thrown error comes back as the op's `error`,
 which becomes `PT API error: <message> (op=<tool>, device=<device>)`.
@@ -129,8 +129,8 @@ Consequences for the wire format:
 
 - **no new ops** — the installed Script Module keeps working, and every one of
   these tools works against an older `bridge.js`;
-- the PT-side cost is one `eval` op per call (two for `pt_pc_command`);
-- `pt_raw` is still the escape hatch, but it no longer has to be the *only* way to
+- the PT-side cost is one `eval` op per call (two for `pc_command`);
+- `raw` is still the escape hatch, but it no longer has to be the *only* way to
   reach the API (PTM-03).
 
 Because `eval` is arbitrary JS, the server does not restrict what a snippet may
@@ -160,8 +160,8 @@ Other rules:
 - Stale results are harmless. If `results/<id>.json` exists but carries a
   different `id`, the server leaves it alone and keeps polling for its own.
 - Directories are created on the first call (`jobs/`, `results/`), and `saved/`
-  on the first `pt_save` without an explicit path. If `<base>` itself is missing,
-  nothing is answered at all, so the server reports "the pt-mcp bridge was never
+  on the first `save` without an explicit path. If `<base>` itself is missing,
+  nothing is answered at all, so the server reports "the packet-tracer-mcp bridge was never
   set up" instead of creating a directory PT is not watching.
 - The bridge only ever touches the **active** `.pkt`. A call cannot reach a lab
   that is open in another window.

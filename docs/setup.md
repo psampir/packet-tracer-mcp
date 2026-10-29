@@ -32,8 +32,8 @@ the lab you want to drive in front.
 
 | Field | Value |
 |---|---|
-| **ID** | `com.psampir.ptmcp` |
-| **Name** | `pt-mcp` |
+| **ID** | `com.psampir.packet-tracer-mcp` |
+| **Name** | `packet-tracer-mcp` |
 | **Startup** | **On Startup** — so the bridge comes up with PT, no clicking later |
 
 ### Script Engine tab
@@ -66,7 +66,7 @@ makes the matching op fail with a privilege/access-denied error:
 ## 3. Save and start
 
 1. Click **Save** / **OK** to close *Configure PT Script Modules…*.
-2. Select `com.psampir.ptmcp` in the module list and click **Start**.
+2. Select `com.psampir.packet-tracer-mcp` in the module list and click **Start**.
    If it was already started before you pasted the script, click **Stop** and
    then **Start** (or use **Run File** once) so the new script is evaluated.
 3. Verify: PT's script log shows
@@ -85,8 +85,8 @@ makes the matching op fail with a privilege/access-denied error:
 > **Quit Packet Tracer cleanly.** The module registration lives in PT's profile
 > and is written on **`File → Exit`**. A crash or a killed process loses it: the
 > next launch starts with an empty module list, so nothing auto-starts. If that
-> happens, re-add `ptmcp.pts` and quit cleanly once — after that it starts with
-> PT.
+> happens, re-add `packet-tracer-mcp.pts` and quit cleanly once — after that it
+> starts with PT.
 
 ## 4. Check it from the server side
 
@@ -95,7 +95,7 @@ cd /home/pawel/Code/Projects/packet-tracer-mcp
 uv run pytest -q            # offline suite, no PT needed
 ```
 
-Then, with the MCP server connected to your agent, call `pt_status` — it answers
+Then, with the MCP server connected to your agent, call `status` — it answers
 `{"version": "9.0.1…", "deviceCount": N}` for the active file. That round trip
 proves PT → bridge → result file → server all work.
 
@@ -131,19 +131,19 @@ the next one.
    initial-configuration dialog, a switch still booting and a busy `ping` all
    look identical from the outside.
    ```jsonc
-   pt_show("S1", "show vlan brief", ready_timeout=60)
+   show("S1", "show vlan brief", ready_timeout=60)
    ```
 2. **Power-cycle the device** — off, then on and wait:
    ```jsonc
-   pt_power("S1", on=False)
-   pt_power("S1", on=True, ready=True, ready_timeout=90)
+   power("S1", on=False)
+   power("S1", on=True, ready=True, ready_timeout=90)
    ```
    `ready=True` polls `get_state` until a real prompt appears, so the next call
    is not typed into a boot sequence.
 3. **Skip the boot** if the device sits in its boot/dialog phase instead of
    power-cycling it again:
    ```jsonc
-   pt_skip_boot("S1")                    # or pt_skip_boot("S1", wait=True)
+   skip_boot("S1")                    # or skip_boot("S1", wait=True)
    ```
 4. **Restart Packet Tracer itself** (close the app, reopen the `.pkt`, make sure
    the Script Module is *Started*) when the console is fine but *no* op answers
@@ -155,7 +155,7 @@ the next one.
 
 > **A power-cycle discards everything that is not saved in the `.pkt`.** The
 > running config of that device (interfaces, VLANs, routing, DHCP pools, DNS
-> entries, pages) is gone after step 2 — `pt_save` first if you have anything to
+> entries, pages) is gone after step 2 — `save` first if you have anything to
 > keep, and re-apply the device's configuration afterwards. Per-device config is
 > not part of the bridge's state; there is no undo.
 
@@ -184,11 +184,31 @@ Those are configuration problems — the error message says which one.
 
 The CLI/mode rules the new file implements are documented in
 [cli-semantics.md](cli-semantics.md) — worth a skim before the first
-`pt_configure` after an update.
+`configure` after an update.
+
+### Renaming the module (0.3.0)
+
+0.3.0 drops the `pt`/`pt-mcp` shorthand from the public surface, so the module
+registered in PT should be renamed by hand once. This is **GUI work only** —
+nothing in the repository touches your PT profile or `~/pt/extensions`.
+
+1. *Configure PT Script Modules…* → select the old module → **General** tab.
+2. Set **Name:** `packet-tracer-mcp` and
+   **ID:** `com.psampir.packet-tracer-mcp`, then **Save**.
+3. **Quit with `File → Exit`** — the clean-exit rule from §3. The new name/ID
+   only persists on a clean exit.
+4. Start PT again and confirm the renamed module is listed and started.
+5. Only **after** PT has re-saved the renamed module, delete the old
+   `ptmcp.pts` / `ptmcp` files from `~/pt/extensions` — they are stale copies
+   from the pre-0.3.0 name and nothing reads them any more.
+
+The runtime directory (`~/.local/share/pt-mcp`) and the `PT_MCP_HOME` variable
+keep their old spelling: they are the mailbox contract with `bridge/bridge.js`,
+which is unchanged in this release.
 
 ## 8. Uninstalling
 
-1. *Configure PT Script Modules…* → select `com.psampir.ptmcp` → **Stop**, then
+1. *Configure PT Script Modules…* → select `com.psampir.packet-tracer-mcp` → **Stop**, then
    **Delete**.
 2. Optionally remove the runtime directory: `rm -rf ~/.local/share/pt-mcp`.
    Nothing else on the system was touched — no service, no firewall rule, no

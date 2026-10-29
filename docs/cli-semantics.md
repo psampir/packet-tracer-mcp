@@ -1,6 +1,6 @@
 # CLI semantics: modes, prompts, waiting and dry runs
 
-`pt_configure` is the only tool that has to get a *modal* CLI right. This page
+`configure` is the only tool that has to get a *modal* CLI right. This page
 defines exactly what the two sides do, so a surprising `% Invalid input` can be
 traced to a rule instead of guessed at.
 
@@ -43,7 +43,7 @@ RETURN`, means still booting.
 
 ## 2. Modes
 
-`pt_configure(..., mode=...)` and the bridge's `plan`/`configure` ops accept:
+`configure(..., mode=...)` and the bridge's `plan`/`configure` ops accept:
 
 | `mode` | What is sent |
 |---|---|
@@ -62,7 +62,7 @@ RETURN`, means still booting.
 | `config` | no prefix; appends `end` unless `keep_session` |
 
 And a device with `hasIos: false` is **always** `raw`, whatever mode was asked
-for: a PC gets zero insertions, so `pt_configure("PC-Users", ["ping 1.1.1.1"])`
+for: a PC gets zero insertions, so `configure("PC-Users", ["ping 1.1.1.1"])`
 types exactly one line.
 
 `keep_session=true` never appends `end`: the device stays in config mode, so a
@@ -70,7 +70,7 @@ series of calls builds one session. Remember to finish the last one with
 `mode="config"` and an explicit `end` (or `raw` + `end`). A block that already
 finishes with `end` does not get a second one.
 
-`exec`/`pt_show` never leave config mode either — while the device sits at
+`exec`/`show` never leave config mode either — while the device sits at
 `S1(config)#`, a `show` line is typed there and the device will reject it. Finish
 the config session (`end`) before reading `show` output.
 
@@ -135,7 +135,7 @@ A freshly added router sits in `--- System Configuration Dialog ---` for tens of
 seconds; a switch under boot answers `% Invalid input` to everything. Both turn
 a config push into garbage, so the **server** waits before it types:
 
-- `pt_add_device` returns `{"name": ..., "ready": true|false}` immediately (it
+- `add_device` returns `{"name": ..., "ready": true|false}` immediately (it
   never blocks);
 - `wait_ready(device, timeout)` polls `get_state` every **250 ms** (real
   `time.sleep`, outside the bridge) until `booting` is false **and** the prompt
@@ -144,8 +144,8 @@ a config push into garbage, so the **server** waits before it types:
   is answered **once** with `no`, followed by one **RETURN** for
   `Press RETURN to get started!`; polling continues. A dialog that stays put is
   reported as such (click *Skip boot* or power-cycle);
-- `pt_configure` and `pt_show` call it first with `ready_timeout` (default
-  45 s); `pt_power(..., ready=True)` does the same after powering a device on;
+- `configure` and `show` call it first with `ready_timeout` (default
+  45 s); `power(..., ready=True)` does the same after powering a device on;
 - on timeout the tool answers `{"ok": false, "error": "device 'R1' was not ready
   within 45s (prompt='', mode='unknown', booting=True). …"}` — with the device,
   the last prompt and the budget, so the fix (longer `ready_timeout`, a
@@ -156,7 +156,7 @@ readiness is seconds, and the server is the side with real timers.
 
 ## 5. `dry_run`
 
-`pt_configure(..., dry_run=True)` calls the bridge's `plan` op and returns the
+`configure(..., dry_run=True)` calls the bridge's `plan` op and returns the
 sequence it *would* send, without touching the console — and without waiting for
 readiness, so it works on a device that is still booting:
 
@@ -178,7 +178,7 @@ session: preview, then send.
 For a `hasIos: false` device, all of the above collapses to `raw`:
 
 ```json
-pt_configure("PC-Users", ["ping 192.168.20.10"], dry_run=True)
+configure("PC-Users", ["ping 192.168.20.10"], dry_run=True)
 {"dry_run": true, "lines": ["ping 192.168.20.10"], "mode": "auto", "effective_mode": "raw"}
 ```
 
@@ -187,7 +187,7 @@ produce `Invalid Command.` ahead of the actual ping (and, on a switch in exec
 mode, a DNS lookup that locked the console).
 
 A PC does not need the CLI to be *configured* either: addressing, DNS records and
-HTTP pages go through the PT API with `pt_set_ip`, `pt_set_ipv6`,
-`pt_dns_record` and `pt_http_page`, and `pt_pc_command`/`pt_ping` exist only for
+HTTP pages go through the PT API with `set_ip`, `set_ipv6`,
+`dns_record` and `http_page`, and `pc_command`/`ping` exist only for
 what the host itself must print (`ipconfig`, `ping`, `tracert`). Nothing on that
 path adds a wrapper line, so it cannot introduce `Invalid Command.` at all.

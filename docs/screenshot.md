@@ -3,7 +3,7 @@
 A lab report needs the diagram, and Packet Tracer 9.0.1 has **no API to render the
 workspace to an image**: `ipc.appWindow()` exposes the window and the file
 operations, `LogicalWorkspace` exposes devices, links and the CLI, but nothing
-returns a bitmap. `pt-mcp` therefore has no `pt_export_png` — PTM-13 ends as
+returns a bitmap. `packet-tracer-mcp` therefore has no `export_png` — PTM-13 ends as
 "wontfix + docs", and this page is the docs.
 
 Two ways out, both fine:
@@ -111,7 +111,7 @@ the topology area plus one or two `show` windows, not the whole canvas.
 3. Crop to the relevant area — the PT canvas is mostly white space.
 
 Agents without a browser/desktop can still produce a diagram: render it from the
-topology the bridge already knows (`pt_list_devices` + `pt_list_links`) with
+topology the bridge already knows (`list_devices` + `list_links`) with
 Graphviz or matplotlib, or as a small HTML/SVG page and call the client's
 `browser.preview`. That is a *diagram of the topology*, not a screenshot — say so
 in the report.
@@ -121,10 +121,10 @@ in the report.
 | Shot | How |
 |---|---|
 | Topology | the canvas with device names and link labels visible (PT: **Options → Preferences → Show link labels**) |
-| Addressing | `pt_get_config("PC-Users")` / `pt_list_ports("R1")` output, or `show ip interface brief` |
-| Routing / VLANs | `pt_show("R1", "show ip route")`, `pt_show("S1", "show vlan brief")` |
-| Services | `pt_dns_list("Server-DNS")`, `pt_http_page("Server-DNS")` |
-| Proof of connectivity | `pt_ping("PC-Users", "192.168.20.10")` — its `output` is the citable evidence |
+| Addressing | `get_config("PC-Users")` / `list_ports("R1")` output, or `show ip interface brief` |
+| Routing / VLANs | `show("R1", "show ip route")`, `show("S1", "show vlan brief")` |
+| Services | `dns_list("Server-DNS")`, `http_page("Server-DNS")` |
+| Proof of connectivity | `ping("PC-Users", "192.168.20.10")` — its `output` is the citable evidence |
 
 Text output is better evidence than a screenshot for configuration; use the PNG
 for the diagram.

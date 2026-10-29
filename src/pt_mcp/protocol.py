@@ -26,12 +26,12 @@ from . import config
 
 #: Shown when a job is not answered in time: almost always a PT-side problem.
 _NOT_RESPONDING = (
-    "Packet Tracer is not responding to the pt-mcp bridge.\n"
+    "Packet Tracer is not responding to the packet-tracer-mcp bridge.\n"
     "Checklist:\n"
     "  1. Cisco Packet Tracer 9.0.1 is running.\n"
     "  2. A .pkt file is open/active (the bridge configures the ACTIVE file).\n"
-    "  3. The pt-mcp Script Module is started: Extensions -> Scripting ->\n"
-    "     Configure PT Script Modules... -> select com.psampir.ptmcp -> Start.\n"
+    "  3. The packet-tracer-mcp Script Module is started: Extensions -> Scripting ->\n"
+    "     Configure PT Script Modules... -> select com.psampir.packet-tracer-mcp -> Start.\n"
     "  4. If the file watcher is not firing, click 'Run File' in the\n"
     "     Scripting Interface to force a rescan.\n"
     "  5. The module's Security Privileges include Application + File Operations\n"
@@ -40,7 +40,7 @@ _NOT_RESPONDING = (
 
 #: Shown when the base directory is absent — the module never ran.
 _NOT_SET_UP = (
-    "The pt-mcp bridge was never set up: base dir {base} does not exist.\n"
+    "The packet-tracer-mcp bridge was never set up: base dir {base} does not exist.\n"
     "Start the bridge once (a Script Module start or 'Run File' in PT creates\n"
     "it), or create it manually:\n"
     "    mkdir -p {base}/jobs {base}/results {base}/saved"

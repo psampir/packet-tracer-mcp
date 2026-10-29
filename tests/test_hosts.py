@@ -157,7 +157,7 @@ def test_bool_is_not_a_cable() -> None:
 
 
 def test_pt_add_device_rejects_an_unknown_type_without_calling_pt(fake, jload) -> None:
-    result = jload(server.pt_add_device("R9", "Routerr", "2911"))
+    result = jload(server.add_device("R9", "Routerr", "2911"))
 
     assert result["ok"] is False
     assert "unknown device type 'Routerr'" in result["error"]
@@ -168,7 +168,7 @@ def test_pt_add_device_rejects_an_unknown_type_without_calling_pt(fake, jload) -
 def test_pt_add_device_accepts_a_type_without_the_e_prefix(fake, jload) -> None:
     fake.answers["add_device"] = {"name": "R1", "ready": False}
 
-    result = jload(server.pt_add_device("R1", "Router", "2911"))
+    result = jload(server.add_device("R1", "Router", "2911"))
 
     assert result["name"] == "R1"
     assert fake.ops_of("add_device")[0]["type"] == 0
@@ -179,7 +179,7 @@ def test_pt_add_device_can_press_skip_boot(fake, jload) -> None:
     fake.answers["add_device"] = {"name": "R2", "ready": False}
     fake.answers["skip_boot"] = {"ok": True}
 
-    result = jload(server.pt_add_device("R2", "eRouter", "2911", skip_boot=True))
+    result = jload(server.add_device("R2", "eRouter", "2911", skip_boot=True))
 
     assert result["skipped_boot"] is True
     assert fake.ops_of("skip_boot") == [{"device": "R2"}]
@@ -188,7 +188,7 @@ def test_pt_add_device_can_press_skip_boot(fake, jload) -> None:
 def test_pt_add_device_surfaces_a_bridge_error(fake, jload) -> None:
     fake.fail["add_device"] = PTBridgeError("device name already used")
 
-    result = jload(server.pt_add_device("R1", "eRouter", "2911"))
+    result = jload(server.add_device("R1", "eRouter", "2911"))
 
     assert result["ok"] is False
     assert "device name already used" in result["error"]
@@ -233,7 +233,7 @@ def test_unknown_cable_lists_the_valid_names_and_a_suggestion() -> None:
 
 
 def test_pt_link_rejects_an_unknown_cable_without_calling_pt(fake, jload) -> None:
-    result = jload(server.pt_link("R1", "GigabitEthernet0/0", "SW1", "GigabitEthernet0/1", "wifi"))
+    result = jload(server.link("R1", "GigabitEthernet0/0", "SW1", "GigabitEthernet0/1", "wifi"))
 
     assert result["ok"] is False
     assert "unknown cable 'wifi'" in result["error"]
@@ -242,7 +242,7 @@ def test_pt_link_rejects_an_unknown_cable_without_calling_pt(fake, jload) -> Non
 
 def test_pt_link_maps_a_friendly_cable_name(fake, jload) -> None:
     result = jload(
-        server.pt_link("R1", "GigabitEthernet0/0", "SW1", "GigabitEthernet0/1", "crossover")
+        server.link("R1", "GigabitEthernet0/0", "SW1", "GigabitEthernet0/1", "crossover")
     )
 
     assert result["ok"] is True
@@ -268,32 +268,32 @@ def test_eval_wraps_a_bridge_failure_with_context(fake) -> None:
     fake.fail["eval"] = PTBridgeError("device not found: ghost")
 
     with pytest.raises(PTBridgeError) as excinfo:
-        server._eval("script", device="ghost", op="pt_get_config")
+        server._eval("script", device="ghost", op="get_config")
 
     message = str(excinfo.value)
     assert message.startswith("PT API error: device not found: ghost")
-    assert "op=pt_get_config" in message
+    assert "op=get_config" in message
     assert "device=ghost" in message
 
 
 def test_api_error_does_not_double_prefix_a_bridge_message() -> None:
-    message = server._api_error("PT API error: boom", "R1", "pt_set_ip")
+    message = server._api_error("PT API error: boom", "R1", "set_ip")
 
-    assert message == "PT API error: boom (op=pt_set_ip, device=R1)"
+    assert message == "PT API error: boom (op=set_ip, device=R1)"
 
 
 def test_eval_rejects_an_answer_without_a_value(fake) -> None:
     fake.raw_eval = {"ports": []}
 
     with pytest.raises(PTBridgeError) as excinfo:
-        server._eval("script", device="R1", op="pt_raw")
+        server._eval("script", device="R1", op="raw")
 
     assert "no 'value'" in str(excinfo.value)
     assert "device=R1" in str(excinfo.value)
 
 
 # --------------------------------------------------------------------------
-# pt_get_config
+# get_config
 # --------------------------------------------------------------------------
 CONFIG_PORT = {
     "name": "FastEthernet0",
@@ -308,7 +308,7 @@ CONFIG_PORT = {
 def test_pt_get_config_reads_every_port(fake, jload) -> None:
     fake.eval_answers = [[CONFIG_PORT, dict(CONFIG_PORT, name="FastEthernet1")]]
 
-    result = jload(server.pt_get_config("PC1"))
+    result = jload(server.get_config("PC1"))
 
     assert [port["name"] for port in result["ports"]] == ["FastEthernet0", "FastEthernet1"]
     js = fake.last_js()
@@ -322,7 +322,7 @@ def test_pt_get_config_reads_every_port(fake, jload) -> None:
 def test_pt_get_config_reads_a_single_port(fake, jload) -> None:
     fake.eval_answers = [[CONFIG_PORT]]
 
-    result = jload(server.pt_get_config("PC1", "FastEthernet0"))
+    result = jload(server.get_config("PC1", "FastEthernet0"))
 
     assert result["ports"][0]["ip"] == "192.168.10.10"
     js = fake.last_js()
@@ -333,14 +333,14 @@ def test_pt_get_config_reads_a_single_port(fake, jload) -> None:
 def test_pt_get_config_rejects_a_non_list(fake, jload) -> None:
     fake.eval_answers = [{"oops": True}]
 
-    result = jload(server.pt_get_config("PC1"))
+    result = jload(server.get_config("PC1"))
 
     assert result["ok"] is False
     assert "expected a port list" in result["error"]
 
 
 # --------------------------------------------------------------------------
-# pt_set_ip
+# set_ip
 # --------------------------------------------------------------------------
 SET_IP_READBACK = {
     "port": "FastEthernet0",
@@ -354,7 +354,7 @@ def test_pt_set_ip_writes_the_address_before_the_mask(fake, jload) -> None:
     fake.eval_answers = [SET_IP_READBACK]
 
     result = jload(
-        server.pt_set_ip("Server-DNS", ip="192.168.20.10", mask="255.255.255.0")
+        server.set_ip("Server-DNS", ip="192.168.20.10", mask="255.255.255.0")
     )
 
     assert result["ip"] == "192.168.20.10"
@@ -371,7 +371,7 @@ def test_pt_set_ip_sets_the_gateway_and_dns(fake, jload) -> None:
     fake.eval_answers = [SET_IP_READBACK]
 
     jload(
-        server.pt_set_ip(
+        server.set_ip(
             "Server-DNS",
             port="GigabitEthernet0/0",
             ip="192.168.20.10",
@@ -393,7 +393,7 @@ def test_pt_set_ip_dhcp_starts_the_client(fake, jload) -> None:
     ]
 
     result = jload(
-        server.pt_set_ip("PC-Users", dhcp=True, ip="10.0.0.9", mask="255.255.255.0")
+        server.set_ip("PC-Users", dhcp=True, ip="10.0.0.9", mask="255.255.255.0")
     )
 
     assert result["dhcp"] is True
@@ -405,7 +405,7 @@ def test_pt_set_ip_dhcp_starts_the_client(fake, jload) -> None:
 
 
 def test_pt_set_ip_rejects_half_an_address(fake, jload) -> None:
-    result = jload(server.pt_set_ip("PC1", ip="10.0.0.2"))
+    result = jload(server.set_ip("PC1", ip="10.0.0.2"))
 
     assert result["ok"] is False
     assert "ip and mask must be given together" in result["error"]
@@ -415,7 +415,7 @@ def test_pt_set_ip_rejects_half_an_address(fake, jload) -> None:
 def test_pt_set_ip_rejects_a_non_object(fake, jload) -> None:
     fake.eval_answers = ["nope"]
 
-    result = jload(server.pt_set_ip("PC1", ip="10.0.0.2", mask="255.255.255.0"))
+    result = jload(server.set_ip("PC1", ip="10.0.0.2", mask="255.255.255.0"))
 
     assert result["ok"] is False
     assert "expected an address" in result["error"]
@@ -424,14 +424,14 @@ def test_pt_set_ip_rejects_a_non_object(fake, jload) -> None:
 def test_pt_set_ip_reports_a_missing_dhcp_process(fake, jload) -> None:
     fake.fail["eval"] = PTBridgeError("no DhcpClient process on PC1")
 
-    result = jload(server.pt_set_ip("PC1", dhcp=True))
+    result = jload(server.set_ip("PC1", dhcp=True))
 
     assert result["ok"] is False
     assert "PT API error: no DhcpClient process on PC1" in result["error"]
 
 
 # --------------------------------------------------------------------------
-# pt_set_ipv6
+# set_ipv6
 # --------------------------------------------------------------------------
 def test_pt_set_ipv6_enables_and_adds_the_address(fake, jload) -> None:
     fake.eval_answers = [
@@ -444,7 +444,7 @@ def test_pt_set_ipv6_enables_and_adds_the_address(fake, jload) -> None:
         }
     ]
 
-    result = jload(server.pt_set_ipv6("PC1", "FastEthernet0", "2001:db8::10"))
+    result = jload(server.set_ipv6("PC1", "FastEthernet0", "2001:db8::10"))
 
     assert result["ipv6"] == ["2001:db8::10/64"]
     js = fake.last_js()
@@ -458,7 +458,7 @@ def test_pt_set_ipv6_enables_and_adds_the_address(fake, jload) -> None:
 def test_pt_set_ipv6_sets_the_default_gateway(fake, jload) -> None:
     fake.eval_answers = [{"port": "FastEthernet0", "ipv6": []}]
 
-    jload(server.pt_set_ipv6("PC1", "FastEthernet0", "2001:db8::10", 96, "2001:db8::1"))
+    jload(server.set_ipv6("PC1", "FastEthernet0", "2001:db8::10", 96, "2001:db8::1"))
 
     js = fake.last_js()
     assert 'addIpv6Address("2001:db8::10", 96, 0, false)' in js
@@ -468,14 +468,14 @@ def test_pt_set_ipv6_sets_the_default_gateway(fake, jload) -> None:
 def test_pt_set_ipv6_rejects_a_non_object(fake, jload) -> None:
     fake.eval_answers = ["nope"]
 
-    result = jload(server.pt_set_ipv6("PC1", "FastEthernet0", "2001:db8::10"))
+    result = jload(server.set_ipv6("PC1", "FastEthernet0", "2001:db8::10"))
 
     assert result["ok"] is False
     assert "expected an address" in result["error"]
 
 
 # --------------------------------------------------------------------------
-# pt_dns_record / pt_dns_list (PTM-04)
+# dns_record / dns_list (PTM-04)
 # --------------------------------------------------------------------------
 DNS_READBACK = {
     "name": "www.g4.lab",
@@ -495,7 +495,7 @@ def test_pt_dns_record_writes_both_a_records(fake, jload) -> None:
     """NXDOMAIN until *both* addIpAddress and addARecordToNameServerDb run."""
     fake.eval_answers = [DNS_READBACK]
 
-    result = jload(server.pt_dns_record("Server-DNS", "www.g4.lab", "192.168.20.10"))
+    result = jload(server.dns_record("Server-DNS", "www.g4.lab", "192.168.20.10"))
 
     assert result["ip_entry"] is True
     assert result["a_record"] is True
@@ -509,7 +509,7 @@ def test_pt_dns_record_writes_both_a_records(fake, jload) -> None:
 def test_pt_dns_record_writes_the_zone_soa_and_ns_by_default(fake, jload) -> None:
     fake.eval_answers = [DNS_READBACK]
 
-    jload(server.pt_dns_record("Server-DNS", "www.g4.lab", "192.168.20.10"))
+    jload(server.dns_record("Server-DNS", "www.g4.lab", "192.168.20.10"))
 
     js = fake.last_js()
     assert (
@@ -522,7 +522,7 @@ def test_pt_dns_record_writes_the_zone_soa_and_ns_by_default(fake, jload) -> Non
 def test_pt_dns_record_zone_defaults_to_the_parent_domain(fake, jload) -> None:
     fake.eval_answers = [DNS_READBACK]
 
-    jload(server.pt_dns_record("DNS1", "lab.local", "10.0.0.5"))
+    jload(server.dns_record("DNS1", "lab.local", "10.0.0.5"))
 
     js = fake.last_js()
     assert 'addSOAToNameServerDb("lab.local", "DNS1", "admin.lab.local"' in js
@@ -532,7 +532,7 @@ def test_pt_dns_record_accepts_zone_ns_mailbox_and_timers(fake, jload) -> None:
     fake.eval_answers = [DNS_READBACK]
 
     jload(
-        server.pt_dns_record(
+        server.dns_record(
             "Server-DNS",
             "api.g4.lab",
             "192.168.20.11",
@@ -557,7 +557,7 @@ def test_pt_dns_record_accepts_zone_ns_mailbox_and_timers(fake, jload) -> None:
 def test_pt_dns_record_can_skip_soa_and_ns(fake, jload) -> None:
     fake.eval_answers = [DNS_READBACK]
 
-    jload(server.pt_dns_record("Server-DNS", "www.g4.lab", "192.168.20.10", soa=False, ns=False))
+    jload(server.dns_record("Server-DNS", "www.g4.lab", "192.168.20.10", soa=False, ns=False))
 
     js = fake.last_js()
     assert "addSOAToNameServerDb" not in js
@@ -567,7 +567,7 @@ def test_pt_dns_record_can_skip_soa_and_ns(fake, jload) -> None:
 def test_pt_dns_record_removes_both_entries(fake, jload) -> None:
     fake.eval_answers = [dict(DNS_READBACK, enabled=False)]
 
-    result = jload(server.pt_dns_record("Server-DNS", "www.g4.lab", "192.168.20.10", enable=False))
+    result = jload(server.dns_record("Server-DNS", "www.g4.lab", "192.168.20.10", enable=False))
 
     assert result["enabled"] is False
     js = fake.last_js()
@@ -580,7 +580,7 @@ def test_pt_dns_record_removes_both_entries(fake, jload) -> None:
 def test_pt_dns_record_surfaces_a_process_error(fake, jload) -> None:
     fake.fail["eval"] = PTBridgeError("no DnsServer process on PC1")
 
-    result = jload(server.pt_dns_record("PC1", "www.g4.lab", "192.168.20.10"))
+    result = jload(server.dns_record("PC1", "www.g4.lab", "192.168.20.10"))
 
     assert result["ok"] is False
     assert "PT API error: no DnsServer process on PC1" in result["error"]
@@ -589,7 +589,7 @@ def test_pt_dns_record_surfaces_a_process_error(fake, jload) -> None:
 def test_pt_dns_record_rejects_a_non_object(fake, jload) -> None:
     fake.eval_answers = ["nope"]
 
-    result = jload(server.pt_dns_record("Server-DNS", "www.g4.lab", "192.168.20.10"))
+    result = jload(server.dns_record("Server-DNS", "www.g4.lab", "192.168.20.10"))
 
     assert result["ok"] is False
     assert "expected a record" in result["error"]
@@ -606,7 +606,7 @@ def test_pt_dns_list_returns_every_entry(fake, jload) -> None:
         }
     ]
 
-    result = jload(server.pt_dns_list("Server-DNS"))
+    result = jload(server.dns_list("Server-DNS"))
 
     assert result["count"] == 2
     assert result["entries"][1] == {"name": "api.g4.lab", "ip": "2.2.2.2"}
@@ -620,7 +620,7 @@ def test_pt_dns_list_returns_every_entry(fake, jload) -> None:
 def test_pt_dns_list_resolves_one_name(fake, jload) -> None:
     fake.eval_answers = [{"name": "www.g4.lab", "ip": "192.168.20.10"}]
 
-    result = jload(server.pt_dns_list("Server-DNS", "www.g4.lab"))
+    result = jload(server.dns_list("Server-DNS", "www.g4.lab"))
 
     assert result["ip"] == "192.168.20.10"
     assert 'getIpAddOfDomain("www.g4.lab")' in fake.last_js()
@@ -629,19 +629,19 @@ def test_pt_dns_list_resolves_one_name(fake, jload) -> None:
 def test_pt_dns_list_rejects_a_non_object(fake, jload) -> None:
     fake.eval_answers = [["entry"]]
 
-    result = jload(server.pt_dns_list("Server-DNS"))
+    result = jload(server.dns_list("Server-DNS"))
 
     assert result["ok"] is False
     assert "expected an entry" in result["error"]
 
 
 # --------------------------------------------------------------------------
-# pt_http_page
+# http_page
 # --------------------------------------------------------------------------
 def test_pt_http_page_enables_and_writes_a_page(fake, jload) -> None:
     fake.eval_answers = [{"path": "index.html", "enabled": True, "page": "<h1>It works</h1>"}]
 
-    result = jload(server.pt_http_page("Server-DNS", "index.html", "<h1>It works</h1>"))
+    result = jload(server.http_page("Server-DNS", "index.html", "<h1>It works</h1>"))
 
     assert result["page"] == "<h1>It works</h1>"
     js = fake.last_js()
@@ -654,7 +654,7 @@ def test_pt_http_page_enables_and_writes_a_page(fake, jload) -> None:
 def test_pt_http_page_keeps_the_page_when_no_content_is_given(fake, jload) -> None:
     fake.eval_answers = [{"path": "index.html", "enabled": False, "page": "old"}]
 
-    jload(server.pt_http_page("Server-DNS", enable=False))
+    jload(server.http_page("Server-DNS", enable=False))
 
     js = fake.last_js()
     assert "setEnable(false)" in js
@@ -665,7 +665,7 @@ def test_pt_http_page_disable_does_not_query_the_disabled_server(fake, jload) ->
     """isEnabled()/getPage() after setEnable(false) takes Packet Tracer down."""
     fake.eval_answers = [{"path": "index.html", "enabled": False, "page": ""}]
 
-    result = jload(server.pt_http_page("Server-DNS", enable=False))
+    result = jload(server.http_page("Server-DNS", enable=False))
 
     assert result["enabled"] is False
     js = fake.last_js()
@@ -675,14 +675,14 @@ def test_pt_http_page_disable_does_not_query_the_disabled_server(fake, jload) ->
 def test_pt_http_page_rejects_a_non_object(fake, jload) -> None:
     fake.eval_answers = [7]
 
-    result = jload(server.pt_http_page("Server-DNS"))
+    result = jload(server.http_page("Server-DNS"))
 
     assert result["ok"] is False
     assert "expected a page" in result["error"]
 
 
 # --------------------------------------------------------------------------
-# pt_pc_command
+# pc_command
 # --------------------------------------------------------------------------
 PC_BUFFER = "C:\\>ping 10.0.0.1\nReply from 10.0.0.1: bytes=32 time=1ms TTL=128\n"
 
@@ -691,7 +691,7 @@ def test_pt_pc_command_returns_the_whole_new_output(fake, clock, jload) -> None:
     before = len("C:\\>ping 10.0.0.1\n")
     fake.eval_answers = [before, PC_BUFFER]
 
-    result = jload(server.pt_pc_command("PC1", "ping 10.0.0.1", wait=3))
+    result = jload(server.pc_command("PC1", "ping 10.0.0.1", wait=3))
 
     assert result["before"] == before
     assert result["output"] == "Reply from 10.0.0.1: bytes=32 time=1ms TTL=128\n"
@@ -705,7 +705,7 @@ def test_pt_pc_command_returns_the_whole_new_output(fake, clock, jload) -> None:
 def test_pt_pc_command_skips_the_sleep_when_wait_is_zero(fake, clock, jload) -> None:
     fake.eval_answers = [0, "out"]
 
-    jload(server.pt_pc_command("PC1", "ipconfig", wait=0))
+    jload(server.pc_command("PC1", "ipconfig", wait=0))
 
     assert clock.sleeps == []
 
@@ -713,7 +713,7 @@ def test_pt_pc_command_skips_the_sleep_when_wait_is_zero(fake, clock, jload) -> 
 def test_pt_pc_command_tolerates_a_reset_buffer(fake, clock, jload) -> None:
     fake.eval_answers = [9999, "short"]
 
-    result = jload(server.pt_pc_command("PC1", "ipconfig"))
+    result = jload(server.pc_command("PC1", "ipconfig"))
 
     assert result["output"] == "short"
 
@@ -721,7 +721,7 @@ def test_pt_pc_command_tolerates_a_reset_buffer(fake, clock, jload) -> None:
 def test_pt_pc_command_tolerates_a_non_numeric_length(fake, clock, jload) -> None:
     fake.eval_answers = ["n/a", "abc"]
 
-    result = jload(server.pt_pc_command("PC1", "ipconfig"))
+    result = jload(server.pc_command("PC1", "ipconfig"))
 
     assert result["before"] == 0
     assert result["output"] == "abc"
@@ -730,7 +730,7 @@ def test_pt_pc_command_tolerates_a_non_numeric_length(fake, clock, jload) -> Non
 def test_pt_pc_command_reports_a_missing_buffer(fake, clock, jload) -> None:
     fake.fail["eval"] = PTBridgeError("device PC1 has no console output buffer")
 
-    result = jload(server.pt_pc_command("PC1", "ipconfig"))
+    result = jload(server.pc_command("PC1", "ipconfig"))
 
     assert result["ok"] is False
     assert "no console output buffer" in result["error"]
@@ -740,19 +740,19 @@ def test_pt_pc_command_waits_for_readiness(fake, clock, jload) -> None:
     fake.answers["get_state"] = {"prompt": "", "mode": "unknown", "booting": True}
     fake.eval_answers = [0, "x"]
 
-    result = jload(server.pt_pc_command("PC1", "ipconfig", ready_timeout=0.5))
+    result = jload(server.pc_command("PC1", "ipconfig", ready_timeout=0.5))
 
     assert result["ok"] is False
     assert "was not ready within 0.5s" in result["error"]
 
 
 # --------------------------------------------------------------------------
-# pt_ping
+# ping
 # --------------------------------------------------------------------------
 def test_pt_ping_parses_the_statistics(fake, clock, jload) -> None:
     fake.eval_answers = [0, PING_OK]
 
-    result = jload(server.pt_ping("PC1", "192.168.10.1"))
+    result = jload(server.ping("PC1", "192.168.10.1"))
 
     assert (result["sent"], result["received"], result["loss"]) == (4, 4, 0)
     assert (result["replies"], result["timed_out"], result["unreachable"]) == (4, 0, 0)
@@ -771,7 +771,7 @@ def test_pt_ping_counts_timeouts(fake, clock, jload) -> None:
     )
     fake.eval_answers = [0, text]
 
-    result = jload(server.pt_ping("PC1", "192.168.10.1"))
+    result = jload(server.ping("PC1", "192.168.10.1"))
 
     assert (result["received"], result["loss"]) == (2, 50)
     assert (result["replies"], result["timed_out"]) == (2, 2)
@@ -781,7 +781,7 @@ def test_pt_ping_counts_an_unreachable_destination(fake, clock, jload) -> None:
     text = "Reply from 10.0.0.2: Destination host unreachable.\n" * 4
     fake.eval_answers = [0, text]
 
-    result = jload(server.pt_ping("PC1", "10.9.9.9"))
+    result = jload(server.ping("PC1", "10.9.9.9"))
 
     assert result["replies"] == 0, "unreachable is not a reply"
     assert result["unreachable"] == 4
@@ -791,7 +791,7 @@ def test_pt_ping_counts_an_unreachable_destination(fake, clock, jload) -> None:
 def test_pt_ping_falls_back_when_statistics_are_missing(fake, clock, jload) -> None:
     fake.eval_answers = [0, "Reply from 10.0.0.1: bytes=32 time=1ms TTL=128\n"]
 
-    result = jload(server.pt_ping("PC1", "10.0.0.1", wait=5))
+    result = jload(server.ping("PC1", "10.0.0.1", wait=5))
 
     assert (result["sent"], result["received"], result["loss"]) == (1, 1, 0)
     assert clock.sleeps == [5]
@@ -800,18 +800,18 @@ def test_pt_ping_falls_back_when_statistics_are_missing(fake, clock, jload) -> N
 def test_pt_ping_reports_an_empty_output(fake, clock, jload) -> None:
     fake.eval_answers = [0, ""]
 
-    result = jload(server.pt_ping("PC1", "10.0.0.1"))
+    result = jload(server.ping("PC1", "10.0.0.1"))
 
     assert (result["sent"], result["received"], result["loss"]) == (0, 0, 0)
 
 
 # --------------------------------------------------------------------------
-# pt_skip_boot
+# skip_boot
 # --------------------------------------------------------------------------
 def test_pt_skip_boot_presses_the_button(fake, jload) -> None:
     fake.answers["skip_boot"] = {"ok": True}
 
-    result = jload(server.pt_skip_boot("R1"))
+    result = jload(server.skip_boot("R1"))
 
     assert result["ok"] is True
     assert fake.ops == [("skip_boot", {"device": "R1"})]
@@ -820,7 +820,7 @@ def test_pt_skip_boot_presses_the_button(fake, jload) -> None:
 def test_pt_skip_boot_can_wait_for_the_prompt(fake, jload) -> None:
     fake.answers["skip_boot"] = {"ok": True}
 
-    result = jload(server.pt_skip_boot("R1", wait=True))
+    result = jload(server.skip_boot("R1", wait=True))
 
     assert result["ready"] is True
     assert [op for op, _ in fake.ops] == ["skip_boot", "get_state"]
@@ -829,14 +829,14 @@ def test_pt_skip_boot_can_wait_for_the_prompt(fake, jload) -> None:
 def test_pt_skip_boot_surfaces_a_bridge_error(fake, jload) -> None:
     fake.fail["skip_boot"] = PTBridgeError("device not found: R9")
 
-    result = jload(server.pt_skip_boot("R9"))
+    result = jload(server.skip_boot("R9"))
 
     assert result["ok"] is False
     assert "device not found: R9" in result["error"]
 
 
 # --------------------------------------------------------------------------
-# pt_list_links / pt_list_ports (PTM-12)
+# list_links / list_ports (PTM-12)
 # --------------------------------------------------------------------------
 LINK = {
     "a": "R1",
@@ -851,7 +851,7 @@ LINK = {
 def test_pt_list_links_returns_the_topology(fake, jload) -> None:
     fake.eval_answers = [[LINK]]
 
-    result = jload(server.pt_list_links())
+    result = jload(server.list_links())
 
     assert result == [LINK]
     js = fake.last_js()
@@ -872,7 +872,7 @@ def test_pt_list_links_dedupes_the_two_ends(fake, jload) -> None:
     }
     fake.eval_answers = [[LINK, reversed_link, LINK]]
 
-    result = jload(server.pt_list_links())
+    result = jload(server.list_links())
 
     assert len(result) == 1, "one cable is one entry, whichever end was walked"
     assert result[0]["a"] == "R1"
@@ -887,7 +887,7 @@ def test_pt_list_links_keeps_four_distinct_cables(fake, jload) -> None:
     ]
     fake.eval_answers = [links + list(reversed(links))]
 
-    result = jload(server.pt_list_links())
+    result = jload(server.list_links())
 
     assert len(result) == 4
 
@@ -895,7 +895,7 @@ def test_pt_list_links_keeps_four_distinct_cables(fake, jload) -> None:
 def test_pt_list_links_skips_junk_entries(fake, jload) -> None:
     fake.eval_answers = [[LINK, "not a link", {"a": "R1"}]]
 
-    result = jload(server.pt_list_links())
+    result = jload(server.list_links())
 
     assert result == [LINK], "a malformed entry is dropped, not passed on"
 
@@ -903,7 +903,7 @@ def test_pt_list_links_skips_junk_entries(fake, jload) -> None:
 def test_pt_list_links_rejects_a_non_list(fake, jload) -> None:
     fake.eval_answers = [{"links": []}]
 
-    result = jload(server.pt_list_links())
+    result = jload(server.list_links())
 
     assert result["ok"] is False
     assert "expected a link list" in result["error"]
@@ -922,7 +922,7 @@ def test_pt_list_ports_reports_link_state(fake, jload) -> None:
     ]
     fake.eval_answers = [ports]
 
-    result = jload(server.pt_list_ports("PC1"))
+    result = jload(server.list_ports("PC1"))
 
     assert result == ports
     js = fake.last_js()
@@ -934,19 +934,19 @@ def test_pt_list_ports_reports_link_state(fake, jload) -> None:
 def test_pt_list_ports_rejects_a_non_list(fake, jload) -> None:
     fake.eval_answers = ["nope"]
 
-    result = jload(server.pt_list_ports("PC1"))
+    result = jload(server.list_ports("PC1"))
 
     assert result["ok"] is False
     assert "expected a port list" in result["error"]
 
 
 # --------------------------------------------------------------------------
-# pt_raw hardening (PTM-15)
+# raw hardening (PTM-15)
 # --------------------------------------------------------------------------
 def test_pt_raw_returns_a_real_json_value(fake) -> None:
     fake.eval_answers = [{"ok": True, "value": {"devices": [{"name": "R1"}]}}]
 
-    payload = server.pt_raw("ipc.network()")
+    payload = server.raw("ipc.network()")
 
     assert '"devices"' in payload
     assert '"value": {' in payload, "the object is not re-encoded as a string"
@@ -956,7 +956,7 @@ def test_pt_raw_returns_a_real_json_value(fake) -> None:
 def test_pt_raw_wraps_the_script_for_error_reporting(fake) -> None:
     fake.eval_answers = [{"ok": True, "value": 2}]
 
-    server.pt_raw("1+1")
+    server.raw("1+1")
 
     js = fake.last_js()
     assert 'try{var __v=eval("1+1");' in js, "the source is a string literal"
@@ -968,7 +968,7 @@ def test_pt_raw_keeps_a_string_result_a_string(fake) -> None:
     """A string expression must not be re-evaluated as code (`"ok"` -> `ok`)."""
     fake.eval_answers = [{"ok": True, "value": "ok"}]
 
-    server.pt_raw('"ok"')
+    server.raw('"ok"')
 
     assert 'eval("\\"ok\\"")' in fake.last_js()
 
@@ -976,17 +976,17 @@ def test_pt_raw_keeps_a_string_result_a_string(fake) -> None:
 def test_pt_raw_turns_a_thrown_error_into_a_message(fake, jload) -> None:
     fake.eval_answers = [{"ok": False, "error": "unknown process 'Bogus'", "line": 3}]
 
-    result = jload(server.pt_raw("device.getProcess('Bogus')"))
+    result = jload(server.raw("device.getProcess('Bogus')"))
 
     assert result["ok"] is False
     assert result["error"].startswith("PT API error: unknown process 'Bogus'")
     assert "at line 3" in result["error"]
-    assert "op=pt_raw" in result["error"]
+    assert "op=raw" in result["error"]
 
 
 def test_pt_raw_rejects_a_too_short_process_name(fake, jload) -> None:
     """PTM-11: ``getProcess("IP")`` must not reach PT's C++ ``substr`` crash."""
-    result = jload(server.pt_raw("device.getProcess('IP')"))
+    result = jload(server.raw("device.getProcess('IP')"))
 
     assert result["ok"] is False
     assert "unknown process 'IP'" in result["error"]
@@ -997,7 +997,7 @@ def test_pt_raw_rejects_a_too_short_process_name(fake, jload) -> None:
 def test_pt_raw_error_without_a_line_still_works(fake, jload) -> None:
     fake.eval_answers = [{"ok": False, "error": "boom", "line": None}]
 
-    result = jload(server.pt_raw("null.x"))
+    result = jload(server.raw("null.x"))
 
     assert result["ok"] is False
     assert "at line" not in result["error"]
@@ -1007,7 +1007,7 @@ def test_pt_raw_error_without_a_line_still_works(fake, jload) -> None:
 def test_pt_raw_truncates_a_large_result(fake, jload) -> None:
     fake.eval_answers = [{"ok": True, "value": "x" * 100}]
 
-    result = jload(server.pt_raw("'x'.repeat(100)", max_chars=20))
+    result = jload(server.raw("'x'.repeat(100)", max_chars=20))
 
     assert result["truncated"] is True
     assert result["value"] == '"' + "x" * 19
@@ -1017,7 +1017,7 @@ def test_pt_raw_truncates_a_large_result(fake, jload) -> None:
 def test_pt_raw_keeps_a_small_result_whole(fake, jload) -> None:
     fake.eval_answers = [{"ok": True, "value": "x" * 10}]
 
-    result = jload(server.pt_raw("'x'.repeat(10)"))
+    result = jload(server.raw("'x'.repeat(10)"))
 
     assert result == {"value": "x" * 10}
 
@@ -1025,7 +1025,7 @@ def test_pt_raw_keeps_a_small_result_whole(fake, jload) -> None:
 def test_pt_raw_can_switch_truncation_off(fake, jload) -> None:
     fake.eval_answers = [{"ok": True, "value": "x" * 50}]
 
-    result = jload(server.pt_raw("'x'.repeat(50)", max_chars=0))
+    result = jload(server.raw("'x'.repeat(50)", max_chars=0))
 
     assert result["value"] == "x" * 50
     assert "truncated" not in result
@@ -1034,7 +1034,7 @@ def test_pt_raw_can_switch_truncation_off(fake, jload) -> None:
 def test_pt_raw_stringifies_an_unserialisable_value(fake, jload) -> None:
     fake.eval_answers = [Raw({"ok": True, "value": {"a", "b"}})]
 
-    result = jload(server.pt_raw("new Set(['a','b'])"))
+    result = jload(server.raw("new Set(['a','b'])"))
 
     assert result["value"] in ("{'a', 'b'}", "{'b', 'a'}")
 
@@ -1043,7 +1043,7 @@ def test_pt_raw_passes_a_foreign_answer_through(fake, jload) -> None:
     """An older bridge (or the fake) may answer without the wrapper object."""
     fake.raw_eval = {"value": "plain"}
 
-    result = jload(server.pt_raw("1"))
+    result = jload(server.raw("1"))
 
     assert result == {"value": "plain"}
 
@@ -1054,24 +1054,24 @@ def test_pt_raw_passes_a_foreign_answer_through(fake, jload) -> None:
 @pytest.mark.parametrize(
     "call",
     [
-        pytest.param(lambda: server.pt_get_config("ghost"), id="get_config"),
+        pytest.param(lambda: server.get_config("ghost"), id="get_config"),
         pytest.param(
-            lambda: server.pt_set_ip("ghost", ip="10.0.0.2", mask="255.255.255.0"),
+            lambda: server.set_ip("ghost", ip="10.0.0.2", mask="255.255.255.0"),
             id="set_ip",
         ),
         pytest.param(
-            lambda: server.pt_set_ipv6("ghost", "FastEthernet0", "2001:db8::2"),
+            lambda: server.set_ipv6("ghost", "FastEthernet0", "2001:db8::2"),
             id="set_ipv6",
         ),
         pytest.param(
-            lambda: server.pt_dns_record("ghost", "www.g4.lab", "10.0.0.2"),
+            lambda: server.dns_record("ghost", "www.g4.lab", "10.0.0.2"),
             id="dns_record",
         ),
-        pytest.param(lambda: server.pt_dns_list("ghost"), id="dns_list"),
-        pytest.param(lambda: server.pt_http_page("ghost"), id="http_page"),
-        pytest.param(lambda: server.pt_list_links(), id="list_links"),
-        pytest.param(lambda: server.pt_list_ports("ghost"), id="list_ports"),
-        pytest.param(lambda: server.pt_raw("ipc.network()"), id="raw"),
+        pytest.param(lambda: server.dns_list("ghost"), id="dns_list"),
+        pytest.param(lambda: server.http_page("ghost"), id="http_page"),
+        pytest.param(lambda: server.list_links(), id="list_links"),
+        pytest.param(lambda: server.list_ports("ghost"), id="list_ports"),
+        pytest.param(lambda: server.raw("ipc.network()"), id="raw"),
     ],
 )
 def test_eval_tools_surface_bridge_errors_as_json(fake, jload, call) -> None:
@@ -1089,7 +1089,7 @@ def test_eval_tools_surface_unexpected_errors(fake, jload, monkeypatch) -> None:
 
     monkeypatch.setattr(server, "call_pt", boom)
 
-    result = jload(server.pt_get_config("PC1"))
+    result = jload(server.get_config("PC1"))
 
     assert result["ok"] is False
     assert "disk on fire" in result["error"]
@@ -1099,54 +1099,54 @@ def test_eval_tools_surface_unexpected_errors(fake, jload, monkeypatch) -> None:
 # end-to-end through tests/fake_bridge.py (marked eval answers)
 # --------------------------------------------------------------------------
 def test_pt_get_config_end_to_end(jload) -> None:
-    jload(server.pt_add_device("PC-E2E", "ePc", "PC-PT"))
+    jload(server.add_device("PC-E2E", "ePc", "PC-PT"))
 
-    config = jload(server.pt_get_config("PC-E2E"))
+    config = jload(server.get_config("PC-E2E"))
 
     assert config["ports"][0]["name"] == "FastEthernet0"
     assert config["ports"][0]["ip"] == "192.168.10.10"
 
 
 def test_pt_set_ip_end_to_end(jload) -> None:
-    jload(server.pt_add_device("PC-SETIP", "ePc", "PC-PT"))
+    jload(server.add_device("PC-SETIP", "ePc", "PC-PT"))
 
-    result = jload(server.pt_set_ip("PC-SETIP", ip="192.168.10.10", mask="255.255.255.0"))
+    result = jload(server.set_ip("PC-SETIP", ip="192.168.10.10", mask="255.255.255.0"))
 
     assert result["ip"] == "192.168.10.10"
     assert result["dhcp"] is False
 
 
 def test_pt_dns_record_end_to_end(jload) -> None:
-    jload(server.pt_add_device("Server-E2E", "eServer", "Server-PT"))
+    jload(server.add_device("Server-E2E", "eServer", "Server-PT"))
 
-    record = jload(server.pt_dns_record("Server-E2E", "www.g4.lab", "192.168.20.10"))
+    record = jload(server.dns_record("Server-E2E", "www.g4.lab", "192.168.20.10"))
 
     assert record["ip_entry"] is True
     assert record["a_record"] is True
 
 
 def test_pt_list_links_end_to_end(jload) -> None:
-    links = jload(server.pt_list_links())
+    links = jload(server.list_links())
 
     assert isinstance(links, list)
     assert links[0]["cable"] == "8100"
 
 
 def test_pt_ping_end_to_end(jload) -> None:
-    jload(server.pt_add_device("PC-PING", "ePc", "PC-PT"))
+    jload(server.add_device("PC-PING", "ePc", "PC-PT"))
 
-    pinged = jload(server.pt_ping("PC-PING", "192.168.10.1", wait=0))
+    pinged = jload(server.ping("PC-PING", "192.168.10.1", wait=0))
 
     assert (pinged["sent"], pinged["received"], pinged["loss"]) == (4, 4, 0)
 
 
 def test_pt_skip_boot_end_to_end(jload) -> None:
-    result = jload(server.pt_skip_boot("PC-PING"))
+    result = jload(server.skip_boot("PC-PING"))
 
     assert result["ok"] is True
 
 
 def test_pt_raw_end_to_end_echoes_unmarked_js(jload) -> None:
-    raw = jload(server.pt_raw("ipc.network().getDeviceCount()"))
+    raw = jload(server.raw("ipc.network().getDeviceCount()"))
 
     assert "[fake eval]" in raw["value"], "unmarked JS is echoed by the fake bridge"

@@ -4,7 +4,38 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-10-29
+
+The `pt_` / `pt-mcp` shorthand is gone from the public surface: tools are called
+`status`, `configure`, `raw`, … and the Packet Tracer Script Module is named
+`packet-tracer-mcp` with the ID `com.psampir.packet-tracer-mcp`. Nothing changes
+on the wire — `bridge/bridge.js` is untouched, so no re-paste is needed.
+
+### Changed
+
+- **Tool names lost the `pt_` prefix.** All 22 MCP tools are now `status`,
+  `list_devices`, `show`, `add_device`, `remove_device`, `link`, `autolink`,
+  `power`, `skip_boot`, `list_links`, `list_ports`, `get_config`, `set_ip`,
+  `set_ipv6`, `dns_record`, `dns_list`, `http_page`, `pc_command`, `ping`,
+  `configure`, `save`, `raw`. Error messages, generated snippet markers
+  (`/* packet-tracer-mcp: <tool> */`) and docstrings follow.
+- **The PT Script Module is `packet-tracer-mcp`** (Name) with the ID
+  `com.psampir.packet-tracer-mcp`; `ptmcp.pts` becomes
+  `packet-tracer-mcp.pts`. Existing installs rename it once in
+  *Configure PT Script Modules…* and quit with `File → Exit` — see
+  [docs/setup.md §7](docs/setup.md#renaming-the-module-030).
+- **The opencode MCP server key is `packet-tracer`** instead of `pt`
+  (`examples/opencode-snippet.jsonc`, `~/.config/opencode/opencode.jsonc`).
+- The runtime mailbox keeps its old spelling: `PT_MCP_HOME`, default
+  `~/.local/share/pt-mcp`, and the Python package stays `pt_mcp`.
+
+### Breaking
+
+- **Every tool call must use the new names.** Clients that call `pt_status`,
+  `pt_configure`, `pt_raw`, … get "unknown tool"; switch to `status`,
+  `configure`, `raw`, … . The renamed tool names also change the
+  `packet_tracer_*` prefix an MCP client exposes, so reconnect/reload the server
+  after upgrading.
 
 ### Added
 
@@ -15,7 +46,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- **`pt_dns_list()` without a name returned `[object Object]` for every entry.**
+- **`dns_list()` without a name returned `[object Object]` for every entry.**
   Entries are now `{"name": ..., "ip": ...}` instead of an opaque pair.
 
 ## [0.2.2] - 2026-10-28

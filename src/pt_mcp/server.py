@@ -2,14 +2,14 @@
 
 Twenty-two tools, in five groups:
 
-* **observe** — :func:`pt_status`, :func:`pt_list_devices`, :func:`pt_show`
-* **build** — :func:`pt_add_device`, :func:`pt_remove_device`, :func:`pt_link`,
-  :func:`pt_autolink`, :func:`pt_power`, :func:`pt_skip_boot`
-* **topology** — :func:`pt_list_links`, :func:`pt_list_ports`
-* **hosts** — :func:`pt_get_config`, :func:`pt_set_ip`, :func:`pt_set_ipv6`,
-  :func:`pt_dns_record`, :func:`pt_dns_list`, :func:`pt_http_page`,
-  :func:`pt_pc_command`, :func:`pt_ping`
-* **change / escape** — :func:`pt_configure`, :func:`pt_save`, :func:`pt_raw`
+* **observe** — :func:`status`, :func:`list_devices`, :func:`show`
+* **build** — :func:`add_device`, :func:`remove_device`, :func:`link`,
+  :func:`autolink`, :func:`power`, :func:`skip_boot`
+* **topology** — :func:`list_links`, :func:`list_ports`
+* **hosts** — :func:`get_config`, :func:`set_ip`, :func:`set_ipv6`,
+  :func:`dns_record`, :func:`dns_list`, :func:`http_page`,
+  :func:`pc_command`, :func:`ping`
+* **change / escape** — :func:`configure`, :func:`save`, :func:`raw`
 
 They all funnel into :func:`pt_mcp.protocol.call_pt`, i.e. one JSON file in
 ``<PT_MCP_HOME>/jobs`` and one out of ``<PT_MCP_HOME>/results``; the ops are
@@ -26,7 +26,7 @@ device has a usable prompt (PTM-01). See ``docs/cli-semantics.md``.
 The **host** and **topology** tools need the Packet Tracer API rather than the
 console, so they are implemented *server-side on top of the existing ``eval`` op*
 (PTM-03/04/12): every one of them generates an ES5 snippet with a
-``/* pt-mcp: <tool> */`` marker, ships it through ``eval``, and unwraps the
+``/* packet-tracer-mcp: <tool> */`` marker, ships it through ``eval``, and unwraps the
 double-encoded answer in :func:`_eval`. The installed Script Module therefore
 keeps working unchanged — no re-paste, no new bridge op.
 
@@ -61,23 +61,23 @@ from .commands import normalize_commands
 from .protocol import PTBridgeError, _err, _ok, call_pt, not_set_up, run_op
 
 _INSTRUCTIONS = f"""\
-Packet Tracer bridge (pt-mcp {__version__}). Packet Tracer must be running with a
-.pkt file open and the com.psampir.ptmcp Script Module started; every tool acts on
+Packet Tracer bridge (packet-tracer-mcp {__version__}). Packet Tracer must be running with a
+.pkt file open and the com.psampir.packet-tracer-mcp Script Module started; every tool acts on
 the ACTIVE file.
 
 Typical flow:
-  1. pt_status()            -> PT version + device count (also proves the bridge works)
-  2. pt_list_devices()      -> names, types, models, link count
-  3. pt_add_device(...)     -> name, type (eDeviceType name or int), model, x, y
-  4. pt_link(a, a_port, b, b_port) / pt_autolink(a, b)
-  5. pt_configure(...)      -> IOS CLI; mode=auto|raw|exec|config, dry_run=True to preview
-  6. pt_show(...)           -> one show/exec command
-  7. pt_power(...) / pt_save(...)
+  1. status()            -> PT version + device count (also proves the bridge works)
+  2. list_devices()      -> names, types, models, link count
+  3. add_device(...)     -> name, type (eDeviceType name or int), model, x, y
+  4. link(a, a_port, b, b_port) / autolink(a, b)
+  5. configure(...)      -> IOS CLI; mode=auto|raw|exec|config, dry_run=True to preview
+  6. show(...)           -> one show/exec command
+  7. power(...) / save(...)
 
 Hosts and topology (no IOS needed, all server-side over the bridge's eval op):
-  pt_get_config, pt_set_ip, pt_set_ipv6, pt_dns_record, pt_dns_list,
-  pt_http_page, pt_pc_command, pt_ping, pt_list_links, pt_list_ports,
-  pt_skip_boot.
+  get_config, set_ip, set_ipv6, dns_record, dns_list,
+  http_page, pc_command, ping, list_links, list_ports,
+  skip_boot.
 
 Commands are wrapped for the mode the device is actually in (enable / configure
 terminal / end), and a PC's shell gets no wrappers at all. Every call waits for
@@ -87,7 +87,7 @@ All results are JSON strings; failures come back as {{"ok": false, "error": ...}
 If a call times out, Packet Tracer is not answering: check that PT is running, a
 .pkt is open, the Script Module is Started (Extensions -> Scripting ->
 Configure PT Script Modules...) and, if the file watcher is silent, click
-'Run File' to force a rescan. pt_raw(js) evaluates arbitrary JS in the PT engine
+'Run File' to force a rescan. raw(js) evaluates arbitrary JS in the PT engine
 and is an escape hatch, not a normal step.
 """
 
@@ -150,7 +150,7 @@ def wait_ready(device: str, timeout: float = READY_TIMEOUT) -> dict[str, Any]:
                     f"device '{device}' is stuck at the IOS initial-configuration "
                     f"dialog after answering 'no' (prompt={state.get('prompt')!r}).\n"
                     "Click 'Skip boot' in the device's config dialog, or "
-                    "power-cycle it with pt_power(on=True, ready=True)."
+                    "power-cycle it with power(on=True, ready=True)."
                 )
             time.sleep(READY_POLL_INTERVAL)
             continue
@@ -181,7 +181,7 @@ def wait_ready(device: str, timeout: float = READY_TIMEOUT) -> dict[str, Any]:
                 f"(prompt={state.get('prompt')!r}, mode={state.get('mode')!r}, "
                 f"booting={state.get('booting')}).\n"
                 "The device is probably still booting: retry with a longer "
-                "ready_timeout, power-cycle it with pt_power(on=True, ready=True), "
+                "ready_timeout, power-cycle it with power(on=True, ready=True), "
                 "or click 'Skip boot' in its config dialog."
             )
         time.sleep(READY_POLL_INTERVAL)
@@ -219,11 +219,11 @@ def _tool(name: str, fn: Any, *args: Any) -> str:
 # Everything below is generated ES5 that runs inside the PT Script Engine. It
 # has no access to Python: the bridge's ``eval`` op evaluates it and returns
 # ``{"value": safeStringify(result)}``, i.e. a JSON string holding JSON. The
-# marker comment on each snippet keeps ``pt_raw`` and the fake bridge honest
+# marker comment on each snippet keeps ``raw`` and the fake bridge honest
 # about which tool produced a script.
 # --------------------------------------------------------------------------
 #: ``DeviceType`` values, identical to ``DEVICE_TYPES`` in ``bridge/bridge.js``
-#: (PT 9.0.1). Used to validate ``pt_add_device`` *before* the call (PTM-09).
+#: (PT 9.0.1). Used to validate ``add_device`` *before* the call (PTM-09).
 DEVICE_TYPES: dict[str, int] = {
     "eRouter": 0,
     "eSwitch": 1,
@@ -268,7 +268,7 @@ DEVICE_TYPES: dict[str, int] = {
     "eCluster": 40,
 }
 
-#: Cable names accepted by ``pt_link``, mapped to the bridge's ``CONNECT_TYPES``
+#: Cable names accepted by ``link``, mapped to the bridge's ``CONNECT_TYPES``
 #: integers (PTM-10). The ``e…`` names are the PortType spellings people (and
 #: the PT docs) use; ``straight``/``crossover``/… are the friendly ones.
 CABLES: dict[str, int] = {
@@ -358,8 +358,8 @@ def _lit(value: Any) -> str:
 
 
 def _marker(name: str) -> str:
-    """The comment that identifies a generated snippet in ``pt_raw``/logs."""
-    return f"/* pt-mcp: {name} */"
+    """The comment that identifies a generated snippet in ``raw``/logs."""
+    return f"/* packet-tracer-mcp: {name} */"
 
 
 def _tmpl(template: string.Template, **values: str) -> str:
@@ -702,14 +702,14 @@ def _get_config(device: str, port: str | None = None) -> dict[str, Any]:
         )
     js = _tmpl(
         _GET_CONFIG_JS,
-        marker=_marker("pt_get_config"),
+        marker=_marker("get_config"),
         lookup=_device_js(device),
         collect=collect,
     )
-    ports = _eval(js, device, "pt_get_config")
+    ports = _eval(js, device, "get_config")
     if not isinstance(ports, list):
         raise PTBridgeError(
-            _api_error(f"expected a port list, got {ports!r}", device, "pt_get_config")
+            _api_error(f"expected a port list, got {ports!r}", device, "get_config")
         )
     return {"ports": ports}
 
@@ -726,7 +726,7 @@ def _set_ip(
     """Set a static address, or start DHCP; return the read-back address."""
     if not dhcp and (ip is None) != (mask is None):
         raise PTBridgeError(
-            "pt_set_ip: ip and mask must be given together "
+            "set_ip: ip and mask must be given together "
             f"(got ip={ip!r}, mask={mask!r}); use dhcp=True for a leased address"
         )
 
@@ -754,14 +754,14 @@ def _set_ip(
 
     js = _tmpl(
         _SET_IP_JS,
-        marker=_marker("pt_set_ip"),
+        marker=_marker("set_ip"),
         lookup=_device_js(device),
         port=port_lit,
         action=action,
     )
-    result = _eval(js, device, "pt_set_ip")
+    result = _eval(js, device, "set_ip")
     if not isinstance(result, dict):
-        raise PTBridgeError(_api_error(f"expected an address, got {result!r}", device, "pt_set_ip"))
+        raise PTBridgeError(_api_error(f"expected an address, got {result!r}", device, "set_ip"))
     return result
 
 
@@ -778,7 +778,7 @@ def _set_ipv6(
         gateway_js = f"    port.setv6DefaultGateway({_lit(gateway)});"
     js = _tmpl(
         _SET_IPV6_JS,
-        marker=_marker("pt_set_ipv6"),
+        marker=_marker("set_ipv6"),
         lookup=_device_js(device),
         port=_lit(port),
         address=_lit(address),
@@ -786,10 +786,10 @@ def _set_ipv6(
         gateway=gateway_js,
         gateway_value=_lit(gateway),
     )
-    result = _eval(js, device, "pt_set_ipv6")
+    result = _eval(js, device, "set_ipv6")
     if not isinstance(result, dict):
         raise PTBridgeError(
-            _api_error(f"expected an address, got {result!r}", device, "pt_set_ipv6")
+            _api_error(f"expected an address, got {result!r}", device, "set_ipv6")
         )
     return result
 
@@ -864,7 +864,7 @@ def _dns_record(
 
     js = _tmpl(
         _DNS_RECORD_JS,
-        marker=_marker("pt_dns_record"),
+        marker=_marker("dns_record"),
         lookup=_device_js(device),
         want=_lit(device),
         name=name_lit,
@@ -877,10 +877,10 @@ def _dns_record(
         ns_record=_lit(bool(ns)),
         action=action,
     )
-    result = _eval(js, device, "pt_dns_record")
+    result = _eval(js, device, "dns_record")
     if not isinstance(result, dict):
         raise PTBridgeError(
-            _api_error(f"expected a record, got {result!r}", device, "pt_dns_record")
+            _api_error(f"expected a record, got {result!r}", device, "dns_record")
         )
     return result
 
@@ -904,14 +904,14 @@ def _dns_list(device: str, name: str | None = None) -> dict[str, Any]:
         )
     js = _tmpl(
         _DNS_LIST_JS,
-        marker=_marker("pt_dns_list"),
+        marker=_marker("dns_list"),
         lookup=_device_js(device),
         want=_lit(device),
         body=body,
     )
-    result = _eval(js, device, "pt_dns_list")
+    result = _eval(js, device, "dns_list")
     if not isinstance(result, dict):
-        raise PTBridgeError(_api_error(f"expected an entry, got {result!r}", device, "pt_dns_list"))
+        raise PTBridgeError(_api_error(f"expected an entry, got {result!r}", device, "dns_list"))
     return result
 
 
@@ -924,16 +924,16 @@ def _http_page(
         content_js = f"    http.setPageContents({_lit(path)}, {_lit(content)});"
     js = _tmpl(
         _HTTP_PAGE_JS,
-        marker=_marker("pt_http_page"),
+        marker=_marker("http_page"),
         lookup=_device_js(device),
         want=_lit(device),
         path=_lit(path),
         enabled=_lit(bool(enable)),
         content=content_js,
     )
-    result = _eval(js, device, "pt_http_page")
+    result = _eval(js, device, "http_page")
     if not isinstance(result, dict):
-        raise PTBridgeError(_api_error(f"expected a page, got {result!r}", device, "pt_http_page"))
+        raise PTBridgeError(_api_error(f"expected a page, got {result!r}", device, "http_page"))
     return result
 
 
@@ -951,7 +951,7 @@ def _pc_output(device: str, *, length: bool, marker: str) -> Any:
         want=_lit(device),
         what=what,
     )
-    return _eval(js, device, "pt_pc_command")
+    return _eval(js, device, "pc_command")
 
 
 def _pc_command(device: str, command: str, wait: float, ready_timeout: float) -> dict[str, Any]:
@@ -962,7 +962,7 @@ def _pc_command(device: str, command: str, wait: float, ready_timeout: float) ->
     ``tracert``) is never cut down to its first chunk.
     """
     wait_ready(device, ready_timeout)
-    before = _pc_output(device, length=True, marker="pt_pc_command len")
+    before = _pc_output(device, length=True, marker="pc_command len")
     try:
         before_len = int(before)
     except (TypeError, ValueError):
@@ -972,7 +972,7 @@ def _pc_command(device: str, command: str, wait: float, ready_timeout: float) ->
     if wait > 0:
         time.sleep(wait)
 
-    full = _pc_output(device, length=False, marker="pt_pc_command output")
+    full = _pc_output(device, length=False, marker="pc_command output")
     text = "" if full is None else str(full)
     output = text[before_len:] if 0 <= before_len <= len(text) else text
     return {
@@ -1089,11 +1089,11 @@ def _dedupe_links(links: list[Any]) -> list[dict[str, Any]]:
 
 def _list_links() -> list[dict[str, Any]]:
     """Every cable in the active workspace, one entry per physical link."""
-    js = _tmpl(_LIST_LINKS_JS, marker=_marker("pt_list_links"))
-    links = _eval(js, None, "pt_list_links")
+    js = _tmpl(_LIST_LINKS_JS, marker=_marker("list_links"))
+    links = _eval(js, None, "list_links")
     if not isinstance(links, list):
         raise PTBridgeError(
-            _api_error(f"expected a link list, got {links!r}", None, "pt_list_links")
+            _api_error(f"expected a link list, got {links!r}", None, "list_links")
         )
     return _dedupe_links(links)
 
@@ -1102,13 +1102,13 @@ def _list_ports(device: str) -> list[dict[str, Any]]:
     """Every port on ``device`` with its link/carrier state."""
     js = _tmpl(
         _LIST_PORTS_JS,
-        marker=_marker("pt_list_ports"),
+        marker=_marker("list_ports"),
         lookup=_device_js(device),
     )
-    ports = _eval(js, device, "pt_list_ports")
+    ports = _eval(js, device, "list_ports")
     if not isinstance(ports, list):
         raise PTBridgeError(
-            _api_error(f"expected a port list, got {ports!r}", device, "pt_list_ports")
+            _api_error(f"expected a port list, got {ports!r}", device, "list_ports")
         )
     return ports
 
@@ -1155,14 +1155,14 @@ def _raw(js: str, max_chars: int) -> dict[str, Any]:
     # The script is embedded as a *string literal* so eval() receives its source
     # text. Concatenating it raw would eval the expression's value instead, which
     # turns a string result into code (`"ok"` -> eval(ok) -> ReferenceError).
-    payload = _eval(_RAW_PREFIX + json.dumps(js) + _RAW_SUFFIX, None, "pt_raw")
+    payload = _eval(_RAW_PREFIX + json.dumps(js) + _RAW_SUFFIX, None, "raw")
 
     if isinstance(payload, dict) and payload.get("ok") is False:
         line = payload.get("line")
         message = str(payload.get("error") or "unknown error")
         if line:
             message += f" at line {line}"
-        raise PTBridgeError(_api_error(message, None, "pt_raw"))
+        raise PTBridgeError(_api_error(message, None, "raw"))
 
     if isinstance(payload, dict) and payload.get("ok") is True:
         value = payload.get("value")
@@ -1183,21 +1183,21 @@ def _raw(js: str, max_chars: int) -> dict[str, Any]:
 # Observe
 # --------------------------------------------------------------------------
 @server.tool()
-def pt_status() -> str:
-    """Check the pt-mcp bridge: PT version and number of devices in the active .pkt."""
+def status() -> str:
+    """Check the packet-tracer-mcp bridge: PT version and number of devices in the active .pkt."""
     if not config.BASE.exists():
         return _err(not_set_up(config.BASE))
     return run_op("ping")
 
 
 @server.tool()
-def pt_list_devices() -> str:
+def list_devices() -> str:
     """List all devices (name, type, model) and the link count in the active .pkt."""
     return run_op("list_devices")
 
 
 @server.tool()
-def pt_show(device: str, command: str, ready_timeout: float = READY_TIMEOUT) -> str:
+def show(device: str, command: str, ready_timeout: float = READY_TIMEOUT) -> str:
     """Run a single show/exec command on a device and return the output.
 
     Args:
@@ -1215,7 +1215,7 @@ def pt_show(device: str, command: str, ready_timeout: float = READY_TIMEOUT) -> 
 # Build
 # --------------------------------------------------------------------------
 @server.tool()
-def pt_add_device(
+def add_device(
     name: str,
     type: str | int,
     model: str,
@@ -1243,7 +1243,7 @@ def pt_add_device(
     except ValueError as exc:
         return _err(str(exc))
     return _tool(
-        "pt_add_device",
+        "add_device",
         _add_device,
         name,
         resolved,
@@ -1273,13 +1273,13 @@ def _add_device(
 
 
 @server.tool()
-def pt_remove_device(name: str) -> str:
+def remove_device(name: str) -> str:
     """Remove a device (by name) from the active workspace."""
     return run_op("remove_device", {"name": name})
 
 
 @server.tool()
-def pt_link(
+def link(
     a: str,
     a_port: str,
     b: str,
@@ -1308,13 +1308,13 @@ def pt_link(
 
 
 @server.tool()
-def pt_autolink(a: str, b: str) -> str:
+def autolink(a: str, b: str) -> str:
     """Auto-connect two devices (PT picks the default cable and ports)."""
     return run_op("autolink", {"a": a, "b": b})
 
 
 @server.tool()
-def pt_power(
+def power(
     device: str,
     on: bool = True,
     ready: bool = False,
@@ -1340,7 +1340,7 @@ def pt_power(
 
 
 @server.tool()
-def pt_skip_boot(device: str, wait: bool = False, ready_timeout: float = READY_TIMEOUT) -> str:
+def skip_boot(device: str, wait: bool = False, ready_timeout: float = READY_TIMEOUT) -> str:
     """Press *Skip boot* on a device so it reaches its console without the boot.
 
     Args:
@@ -1349,40 +1349,40 @@ def pt_skip_boot(device: str, wait: bool = False, ready_timeout: float = READY_T
         ready_timeout: seconds to wait for that prompt when ``wait`` is true.
 
     Use it on a freshly added IOS device (or one stuck in the boot sequence);
-    ``pt_add_device(..., skip_boot=True)`` does the same in one call.
+    ``add_device(..., skip_boot=True)`` does the same in one call.
     """
-    return _tool("pt_skip_boot", _skip_boot, device, bool(wait), ready_timeout)
+    return _tool("skip_boot", _skip_boot, device, bool(wait), ready_timeout)
 
 
 # --------------------------------------------------------------------------
 # Topology
 # --------------------------------------------------------------------------
 @server.tool()
-def pt_list_links() -> str:
+def list_links() -> str:
     """List every cable in the active .pkt, one entry per physical link.
 
     Returns ``[{a, a_port, b, b_port, cable, up}]``; ``cable`` is PT's
     connection-type id as a string and ``up`` is true when both ends have
     carrier. Entries are deduped, so each cable appears once.
     """
-    return _tool("pt_list_links", _list_links)
+    return _tool("list_links", _list_links)
 
 
 @server.tool()
-def pt_list_ports(device: str) -> str:
+def list_ports(device: str) -> str:
     """List a device's ports: name, up, protocol_up, ip, mask and the link peer.
 
     Returns ``[{name, up, protocol_up, ip, mask, link}]``; ``link`` is
     ``"<device> <port>"`` of the other end, or ``""`` when the port is free.
     """
-    return _tool("pt_list_ports", _list_ports, device)
+    return _tool("list_ports", _list_ports, device)
 
 
 # --------------------------------------------------------------------------
 # Hosts (end devices, servers and any other non-IOS addressable port)
 # --------------------------------------------------------------------------
 @server.tool()
-def pt_get_config(device: str, port: str | None = None) -> str:
+def get_config(device: str, port: str | None = None) -> str:
     """Read the IP configuration of a device's ports (all ports by default).
 
     Args:
@@ -1391,11 +1391,11 @@ def pt_get_config(device: str, port: str | None = None) -> str:
 
     Returns ``{"ports": [{name, ip, mask, dhcp, ipv6, up}]}``.
     """
-    return _tool("pt_get_config", _get_config, device, port)
+    return _tool("get_config", _get_config, device, port)
 
 
 @server.tool()
-def pt_set_ip(
+def set_ip(
     device: str,
     port: str = "FastEthernet0",
     ip: str | None = None,
@@ -1415,15 +1415,15 @@ def pt_set_ip(
         dns: DNS server address, when given.
         dhcp: request a lease instead. The static fields are ignored; PT's DHCP
             client runs asynchronously, so the returned address may still be
-            0.0.0.0 — read it again with pt_get_config after a moment.
+            0.0.0.0 — read it again with get_config after a moment.
 
     Returns ``{"port", "ip", "mask", "dhcp"}`` read back from the device.
     """
-    return _tool("pt_set_ip", _set_ip, device, port, ip, mask, gateway, dns, bool(dhcp))
+    return _tool("set_ip", _set_ip, device, port, ip, mask, gateway, dns, bool(dhcp))
 
 
 @server.tool()
-def pt_set_ipv6(
+def set_ipv6(
     device: str,
     port: str,
     address: str,
@@ -1442,12 +1442,12 @@ def pt_set_ipv6(
     Returns ``{"port", "address", "prefix", "gateway", "ipv6"}`` read back.
     """
     return _tool(
-        "pt_set_ipv6", _set_ipv6, device, port, address, int(prefix), gateway
+        "set_ipv6", _set_ipv6, device, port, address, int(prefix), gateway
     )
 
 
 @server.tool()
-def pt_dns_record(
+def dns_record(
     device: str,
     name: str,
     ip: str,
@@ -1485,7 +1485,7 @@ def pt_dns_record(
     soa, ns_record, ip_entry, a_record, entries}``.
     """
     return _tool(
-        "pt_dns_record",
+        "dns_record",
         _dns_record,
         device,
         name,
@@ -1504,7 +1504,7 @@ def pt_dns_record(
 
 
 @server.tool()
-def pt_dns_list(device: str, name: str | None = None) -> str:
+def dns_list(device: str, name: str | None = None) -> str:
     """Inspect a DNS server: one domain's address, or every entry it holds.
 
     Args:
@@ -1512,11 +1512,11 @@ def pt_dns_list(device: str, name: str | None = None) -> str:
         name: optional domain; ``{"name", "ip"}`` when given, otherwise
             ``{"count", "entries"}``.
     """
-    return _tool("pt_dns_list", _dns_list, device, name)
+    return _tool("dns_list", _dns_list, device, name)
 
 
 @server.tool()
-def pt_http_page(
+def http_page(
     device: str,
     path: str = "index.html",
     content: str | None = None,
@@ -1532,11 +1532,11 @@ def pt_http_page(
 
     Returns ``{"path", "enabled", "page"}`` with the page as stored.
     """
-    return _tool("pt_http_page", _http_page, device, path, content, bool(enable))
+    return _tool("http_page", _http_page, device, path, content, bool(enable))
 
 
 @server.tool()
-def pt_pc_command(device: str, command: str, wait: float = 10, ready_timeout: float = 45) -> str:
+def pc_command(device: str, command: str, wait: float = 10, ready_timeout: float = 45) -> str:
     """Type a command into a host's shell and return everything it printed.
 
     For PCs, servers and other devices without IOS (their console is a command
@@ -1553,7 +1553,7 @@ def pt_pc_command(device: str, command: str, wait: float = 10, ready_timeout: fl
     the whole new console text, not just its first chunk.
     """
     return _tool(
-        "pt_pc_command",
+        "pc_command",
         _pc_command,
         device,
         command,
@@ -1563,7 +1563,7 @@ def pt_pc_command(device: str, command: str, wait: float = 10, ready_timeout: fl
 
 
 @server.tool()
-def pt_ping(src: str, dst: str, count: int = 4, wait: float = 10) -> str:
+def ping(src: str, dst: str, count: int = 4, wait: float = 10) -> str:
     """Ping from a host and summarise the result.
 
     Args:
@@ -1576,14 +1576,14 @@ def pt_ping(src: str, dst: str, count: int = 4, wait: float = 10) -> str:
     Returns ``{"src", "dst", "count", "sent", "received", "loss", "replies",
     "timed_out", "unreachable", "output"}`` with ``loss`` as a percentage.
     """
-    return _tool("pt_ping", _ping, src, dst, int(count), float(wait))
+    return _tool("ping", _ping, src, dst, int(count), float(wait))
 
 
 # --------------------------------------------------------------------------
 # Change / escape
 # --------------------------------------------------------------------------
 @server.tool()
-def pt_configure(
+def configure(
     device: str,
     commands: str | list[str],
     mode: str = "auto",
@@ -1644,7 +1644,7 @@ def pt_configure(
 
 
 @server.tool()
-def pt_save(path: str = "") -> str:
+def save(path: str = "") -> str:
     """Save the active .pkt to a path (default: <base>/saved/<timestamp>.pkt)."""
     if not path:
         config.SAVED.mkdir(parents=True, exist_ok=True)
@@ -1654,7 +1654,7 @@ def pt_save(path: str = "") -> str:
 
 
 @server.tool()
-def pt_raw(js: str, max_chars: int = 20000) -> str:
+def raw(js: str, max_chars: int = 20000) -> str:
     """Escape hatch: evaluate arbitrary JS inside the PT Script Engine.
 
     The script has access to the global ``ipc`` object; use with care. Example:
@@ -1666,7 +1666,7 @@ def pt_raw(js: str, max_chars: int = 20000) -> str:
     engine reports one. Results longer than ``max_chars`` are cut and flagged
     with ``"truncated": true``.
     """
-    return _tool("pt_raw", _raw, js, int(max_chars))
+    return _tool("raw", _raw, js, int(max_chars))
 
 
 # --------------------------------------------------------------------------

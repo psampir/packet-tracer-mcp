@@ -31,7 +31,7 @@ def test_ping_returns_device_count() -> None:
 
 
 def test_pt_status_reports_version(jload) -> None:
-    status = jload(server.pt_status())
+    status = jload(server.status())
     assert "fake" in status["version"]
 
 
@@ -39,25 +39,25 @@ def test_pt_status_reports_version(jload) -> None:
 # devices
 # --------------------------------------------------------------------------
 def test_pt_add_device_returns_name(jload) -> None:
-    added = jload(server.pt_add_device("R1", "eRouter", "2911", 120.0, 90.0))
+    added = jload(server.add_device("R1", "eRouter", "2911", 120.0, 90.0))
     assert added["name"] == "R1"
 
 
 def test_pt_add_device_reports_readiness(jload) -> None:
     """PTM-01: the flag is non-blocking; the caller decides whether to wait."""
-    added = jload(server.pt_add_device("R2", "eRouter", "2911"))
+    added = jload(server.add_device("R2", "eRouter", "2911"))
     assert added["ready"] is True
 
 
 def test_pt_list_devices_includes_added(jload) -> None:
-    jload(server.pt_add_device("SW1", "eSwitch", "2960-24TT"))
-    listed = jload(server.pt_list_devices())
+    jload(server.add_device("SW1", "eSwitch", "2960-24TT"))
+    listed = jload(server.list_devices())
     names = {device["name"] for device in listed["devices"]}
     assert {"R1", "SW1"} <= names
 
 
 def test_pt_list_devices_reports_type_and_model(jload) -> None:
-    listed = jload(server.pt_list_devices())
+    listed = jload(server.list_devices())
     r1 = next(device for device in listed["devices"] if device["name"] == "R1")
     assert r1["type"] == 0
     assert r1["typeName"] == "eRouter"
@@ -65,12 +65,12 @@ def test_pt_list_devices_reports_type_and_model(jload) -> None:
 
 
 def test_pt_remove_device(jload) -> None:
-    removed = jload(server.pt_remove_device("SW1"))
+    removed = jload(server.remove_device("SW1"))
     assert removed["removed"] is True
 
 
 def test_pt_remove_unknown_device_is_not_an_error(jload) -> None:
-    removed = jload(server.pt_remove_device("NOPE"))
+    removed = jload(server.remove_device("NOPE"))
     assert removed["removed"] is False
 
 
@@ -78,26 +78,26 @@ def test_pt_remove_unknown_device_is_not_an_error(jload) -> None:
 # links
 # --------------------------------------------------------------------------
 def test_pt_link(jload) -> None:
-    jload(server.pt_add_device("SW1", "eSwitch", "2960-24TT"))
-    linked = jload(server.pt_link("R1", "GigabitEthernet0/0", "SW1", "GigabitEthernet0/1"))
+    jload(server.add_device("SW1", "eSwitch", "2960-24TT"))
+    linked = jload(server.link("R1", "GigabitEthernet0/0", "SW1", "GigabitEthernet0/1"))
     assert linked["linked"] is True
 
 
 def test_pt_link_uses_the_a_b_convention(jload) -> None:
     """PTM-16: one naming convention for both ends (a / a_port, b / b_port)."""
     linked = jload(
-        server.pt_link(a="R1", a_port="GigabitEthernet0/0", b="SW1", b_port="GigabitEthernet0/1")
+        server.link(a="R1", a_port="GigabitEthernet0/0", b="SW1", b_port="GigabitEthernet0/1")
     )
     assert linked["linked"] is True
 
 
 def test_pt_autolink(jload) -> None:
-    auto = jload(server.pt_autolink("R1", "SW1"))
+    auto = jload(server.autolink("R1", "SW1"))
     assert auto["ok"] is True
 
 
 def test_pt_autolink_uses_the_a_b_convention(jload) -> None:
-    assert jload(server.pt_autolink(a="R1", b="SW1"))["ok"] is True
+    assert jload(server.autolink(a="R1", b="SW1"))["ok"] is True
 
 
 # --------------------------------------------------------------------------
@@ -105,7 +105,7 @@ def test_pt_autolink_uses_the_a_b_convention(jload) -> None:
 # --------------------------------------------------------------------------
 def test_pt_configure_returns_output(jload) -> None:
     conf = jload(
-        server.pt_configure(
+        server.configure(
             "R1",
             "hostname R1\n!\ninterface GigabitEthernet0/0\n"
             " ip address 10.0.0.1 255.255.255.0\n no shutdown\n",
@@ -115,39 +115,39 @@ def test_pt_configure_returns_output(jload) -> None:
 
 
 def test_pt_configure_returns_prompt(jload) -> None:
-    conf = jload(server.pt_configure("R1", "hostname R1"))
+    conf = jload(server.configure("R1", "hostname R1"))
     assert conf["prompt"].startswith("R1")
 
 
 def test_pt_configure_reports_mode_and_effective_mode(jload) -> None:
-    conf = jload(server.pt_configure("R1", "hostname R1"))
+    conf = jload(server.configure("R1", "hostname R1"))
     assert conf["mode"] == "auto", "the requested mode is echoed back"
     assert conf["effective_mode"] == "config", "a config line at R1# becomes config"
 
 
 def test_pt_configure_wraps_a_config_block(jload) -> None:
-    conf = jload(server.pt_configure("R1", "hostname R1"))
+    conf = jload(server.configure("R1", "hostname R1"))
     sent = [entry["line"] for entry in conf["lines"]]
     assert sent == ["configure terminal", "hostname R1", "end"]
 
 
 def test_pt_configure_wraps_a_switch_block(jload) -> None:
-    jload(server.pt_add_device("SW2", "eSwitch", "2960-24TT"))
-    conf = jload(server.pt_configure("SW2", "vlan 10"))
+    jload(server.add_device("SW2", "eSwitch", "2960-24TT"))
+    conf = jload(server.configure("SW2", "vlan 10"))
     sent = [entry["line"] for entry in conf["lines"]]
     assert sent == ["configure terminal", "vlan 10", "end"]
 
 
 def test_pt_configure_accepts_list(jload) -> None:
-    conf = jload(server.pt_configure("R1", ["hostname R1", "! comment", "  "]))
+    conf = jload(server.configure("R1", ["hostname R1", "! comment", "  "]))
     assert conf["prompt"].startswith("R1")
     assert "! comment" not in conf["output"]
 
 
 def test_pt_configure_passes_mode_and_keep_session(jload) -> None:
-    jload(server.pt_add_device("R-KEEP", "eRouter", "2911"))
+    jload(server.add_device("R-KEEP", "eRouter", "2911"))
     conf = jload(
-        server.pt_configure("R-KEEP", "vlan 10", mode="config", keep_session=True)
+        server.configure("R-KEEP", "vlan 10", mode="config", keep_session=True)
     )
     assert conf["mode"] == "config"
     assert conf["effective_mode"] == "config"
@@ -155,8 +155,8 @@ def test_pt_configure_passes_mode_and_keep_session(jload) -> None:
 
 
 def test_pt_configure_dry_run_returns_the_plan_without_sending(jload) -> None:
-    jload(server.pt_add_device("R-DRY", "eRouter", "2911"))
-    planned = jload(server.pt_configure("R-DRY", "hostname R1", dry_run=True))
+    jload(server.add_device("R-DRY", "eRouter", "2911"))
+    planned = jload(server.configure("R-DRY", "hostname R1", dry_run=True))
     assert planned["dry_run"] is True
     assert planned["lines"] == ["configure terminal", "hostname R1", "end"]
     assert planned["mode"] == "auto"
@@ -164,26 +164,26 @@ def test_pt_configure_dry_run_returns_the_plan_without_sending(jload) -> None:
 
 
 def test_pt_configure_dry_run_on_a_pc_sends_nothing_extra(jload) -> None:
-    jload(server.pt_add_device("PC-DRY", "ePc", "PC-PT"))
-    planned = jload(server.pt_configure("PC-DRY", ["ping 192.168.20.10"], dry_run=True))
+    jload(server.add_device("PC-DRY", "ePc", "PC-PT"))
+    planned = jload(server.configure("PC-DRY", ["ping 192.168.20.10"], dry_run=True))
     assert planned["lines"] == ["ping 192.168.20.10"]
     assert planned["effective_mode"] == "raw"
 
 
 def test_pt_configure_rejects_empty_input(jload) -> None:
-    result = jload(server.pt_configure("R1", "! only a comment\n\n"))
+    result = jload(server.configure("R1", "! only a comment\n\n"))
     assert result["ok"] is False
     assert "no commands" in result["error"]
 
 
 def test_pt_show(jload) -> None:
-    shown = jload(server.pt_show("R1", "show ip interface brief"))
+    shown = jload(server.show("R1", "show ip interface brief"))
     assert "show ip interface brief" in shown["output"]
     assert shown["effective_mode"] == "exec"
 
 
 def test_pt_show_rejects_an_empty_command(jload) -> None:
-    shown = jload(server.pt_show("R1", "   "))
+    shown = jload(server.show("R1", "   "))
     assert shown["ok"] is False
     assert "no command supplied" in shown["error"]
 
@@ -192,31 +192,31 @@ def test_pt_show_rejects_an_empty_command(jload) -> None:
 # power / save / raw
 # --------------------------------------------------------------------------
 def test_pt_power_on(jload) -> None:
-    assert jload(server.pt_power("R1", True))["ok"] is True
+    assert jload(server.power("R1", True))["ok"] is True
 
 
 def test_pt_power_off(jload) -> None:
-    assert jload(server.pt_power("R1", False))["ok"] is True
+    assert jload(server.power("R1", False))["ok"] is True
 
 
 def test_pt_save_default_path(jload) -> None:
-    saved = jload(server.pt_save())
+    saved = jload(server.save())
     assert saved["saved"] is True
     assert "/saved/" in saved["path"]
 
 
 def test_pt_save_creates_saved_dir(jload, home: Path) -> None:
-    jload(server.pt_save())
+    jload(server.save())
     assert (home / "saved").is_dir()
 
 
 def test_pt_save_explicit_path(jload) -> None:
-    saved = jload(server.pt_save("/tmp/lab.pkt"))
+    saved = jload(server.save("/tmp/lab.pkt"))
     assert saved["path"] == "/tmp/lab.pkt"
 
 
 def test_pt_raw_returns_value(jload) -> None:
-    raw = jload(server.pt_raw("ipc.network().getDeviceCount()"))
+    raw = jload(server.raw("ipc.network().getDeviceCount()"))
     assert "value" in raw
 
 
@@ -238,7 +238,7 @@ def test_tool_surfaces_bridge_error_as_json(jload) -> None:
 def test_pt_status_reports_never_set_up(monkeypatch: pytest.MonkeyPatch, jload) -> None:
     missing = Path("/nonexistent/pt-mcp-does-not-exist")
     monkeypatch.setattr(config, "BASE", missing)
-    guard = jload(server.pt_status())
+    guard = jload(server.status())
     assert guard["ok"] is False
     assert "never set up" in guard["error"]
 

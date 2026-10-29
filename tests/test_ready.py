@@ -205,7 +205,7 @@ def test_pt_configure_waits_then_configures(
     fake = FakeBridge([booting(), booting(), ready()])
     monkeypatch.setattr(server, "call_pt", fake)
 
-    result = server.pt_configure("R1", "hostname R1")
+    result = server.configure("R1", "hostname R1")
 
     assert "[fake]" in result, "the real op ran through the fake bridge on disk"
     assert [op for op, _ in fake.ops] == ["get_state", "get_state", "get_state"]
@@ -216,7 +216,7 @@ def test_pt_configure_reports_a_readiness_timeout_as_json(
 ) -> None:
     monkeypatch.setattr(server, "call_pt", FakeBridge([booting()]))
 
-    result = server.pt_configure("R1", "hostname R1", ready_timeout=1.0)
+    result = server.configure("R1", "hostname R1", ready_timeout=1.0)
 
     assert '"ok": false' in result
     assert "was not ready within 1s" in result
@@ -235,7 +235,7 @@ def test_pt_configure_dry_run_does_not_wait_for_readiness(
 
     monkeypatch.setattr(server, "call_pt", plan_only)
 
-    result = server.pt_configure("R1", "hostname R1", dry_run=True)
+    result = server.configure("R1", "hostname R1", dry_run=True)
 
     assert calls == ["plan"]
     assert '"dry_run": true' in result
@@ -247,7 +247,7 @@ def test_pt_show_waits_for_readiness(
     fake = FakeBridge([booting(), ready()])
     monkeypatch.setattr(server, "call_pt", fake)
 
-    result = server.pt_show("R1", "show version")
+    result = server.show("R1", "show version")
 
     assert "[fake]" in result
     assert [op for op, _ in fake.ops] == ["get_state", "get_state"]
@@ -258,7 +258,7 @@ def test_pt_show_reports_a_readiness_timeout_as_json(
 ) -> None:
     monkeypatch.setattr(server, "call_pt", FakeBridge([booting()]))
 
-    result = server.pt_show("R1", "show version", ready_timeout=1.0)
+    result = server.show("R1", "show version", ready_timeout=1.0)
 
     assert '"ok": false' in result
     assert "was not ready within 1s" in result
@@ -272,7 +272,7 @@ def test_pt_configure_dry_run_surfaces_a_bridge_error(
 
     monkeypatch.setattr(server, "call_pt", missing)
 
-    result = server.pt_configure("ghost", "hostname X", dry_run=True)
+    result = server.configure("ghost", "hostname X", dry_run=True)
 
     assert '"ok": false' in result
     assert "device not found: ghost" in result
@@ -286,7 +286,7 @@ def test_pt_configure_dry_run_surfaces_unexpected_errors(
 
     monkeypatch.setattr(server, "call_pt", boom)
 
-    result = server.pt_configure("R1", "hostname R1", dry_run=True)
+    result = server.configure("R1", "hostname R1", dry_run=True)
 
     assert '"ok": false' in result
     assert "disk on fire" in result
@@ -298,7 +298,7 @@ def test_pt_power_ready_waits_for_the_boot(
     fake = FakeBridge([booting(), ready()])
     monkeypatch.setattr(server, "call_pt", fake)
 
-    result = server.pt_power("R1", on=True, ready=True)
+    result = server.power("R1", on=True, ready=True)
 
     assert '"ok": true' in result
     assert len(fake.ops) == 2
@@ -310,7 +310,7 @@ def test_pt_power_without_ready_does_not_wait(
     fake = FakeBridge([booting()])
     monkeypatch.setattr(server, "call_pt", fake)
 
-    server.pt_power("R1", on=True)
+    server.power("R1", on=True)
 
     assert fake.ops == [], "no readiness poll unless ready=True"
 
@@ -321,7 +321,7 @@ def test_pt_power_off_never_waits(
     fake = FakeBridge([booting()])
     monkeypatch.setattr(server, "call_pt", fake)
 
-    server.pt_power("R1", on=False, ready=True)
+    server.power("R1", on=False, ready=True)
 
     assert fake.ops == []
 
@@ -334,7 +334,7 @@ def test_wait_ready_surfaces_unexpected_errors_as_json(
 
     monkeypatch.setattr(server, "call_pt", boom)
 
-    result = server.pt_configure("R1", "hostname R1")
+    result = server.configure("R1", "hostname R1")
 
     assert '"ok": false' in result
     assert "serial port on fire" in result
