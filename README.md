@@ -164,6 +164,12 @@ seconds) to change the per-call deadline.
 Twenty-two tools, all returning JSON strings. Failures never raise into the client: they come back as
 `{"ok": false, "error": "…"}` with an actionable message.
 
+Long output is safe: when a `show` stops at `--More--` the bridge presses space and keeps reading
+(up to 200 pages) and reports `pager_presses`; if the pager will not advance the line fails with
+`reason: "pager"` instead of returning a truncated table. A command that goes silent without a prompt
+gets one Ctrl+Shift+6 after 1.5 s and reports `console_break`, so a wedged console is a named failure
+rather than a timeout that says nothing. Details: [docs/cli-semantics.md §6](docs/cli-semantics.md#6-paging-and-a-wedged-console).
+
 The **host**, **topology** and **raw** tools are implemented server-side on top of the existing
 `eval` bridge op: each generates an ES5 snippet, marker-tagged
 `/* packet-tracer-mcp: <tool> */`, and unwraps the answer. That is why they need no new bridge op
@@ -218,7 +224,8 @@ types into the shell when you need the host's own output, and `ping` turns it in
 | `stopped_on` in a `configure` result | The device rejected that line (`% Invalid input`, …) or never settled | Check `index`/`line`/`prompt`; rerun with `dry_run=True` to see the wrappers the bridge adds, or `mode="raw"` to send the block verbatim. |
 | `link` fails | Port names are case-sensitive (`GigabitEthernet0/0`); try `autolink` to let PT pick compatible ports. |
 | `unknown device type` / `unknown cable` | The name is not one PT knows. The error lists every valid value and suggests the closest: `add_device("R1", "Router", "2911")` works too (`e` optional, case-insensitive). |
-| Console wedged: no prompt, calls do not land | Work through the ordered recovery procedure in [docs/setup.md §6](docs/setup.md#6-recovery-a-wedged-console): wait → power-cycle with `ready=True` → `skip_boot` → restart PT. A power-cycle **discards unsaved config**. |
+| Console wedged: no prompt, calls do not land | The bridge already sends Ctrl+Shift+6 once (look for `console_break` in the result). If that is not enough, work through the ordered recovery in [docs/setup.md §6](docs/setup.md#6-recovery-a-wedged-console): wait → power-cycle with `ready=True` → `skip_boot` → restart PT. A power-cycle **discards unsaved config**. |
+| `reason: "pager"` in a `show` result | Output stopped at `--More--` and pressing space did not advance it, usually because the module predates 0.4.0. Re-import the `.pts` from the release, or paste the current `bridge/bridge.js`. |
 | `nslookup` still says NXDOMAIN after a DNS entry | An entry needs both halves. `dns_record` writes `addIpAddress` **and** `addARecordToNameServerDb` (plus SOA/NS) in one call; re-add the record with it instead of using `raw`. |
 | `raw` reports `PT API error: …` with a line number | The JS threw: often `getProcess("IP")` with a name shorter than the API expects. Read the message; the line number is where the engine failed. |
 | Need a diagram for a report | PT 9.0.1 cannot export an image. Follow [docs/screenshot.md](docs/screenshot.md) (niri + grim under Wayland) or use the manual screenshot route. |

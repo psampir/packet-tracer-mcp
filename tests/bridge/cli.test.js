@@ -545,3 +545,81 @@ test("exec rejects an empty command", () => {
 
   assert.throws(() => iso.ctx.dispatch("exec", { device: "Switch", command: "  " }), /no command supplied/);
 });
+
+test("a paged show is answered with space and returns every page", () => {
+  const iso = loadBridge();
+  const sw = device(iso, {
+    name: "S1",
+    type: 1,
+    prompt: "S1#",
+    /* IOS stops after a page and prints the marker instead of the prompt. */
+    pager: ["vlan 10\n--More--", "vlan 20\n--More--", "vlan 30\nS1#"],
+  });
+
+  const result = plain(iso.ctx.dispatch("exec", { device: "S1", command: "show vlan" }));
+
+  assert.equal(result.ok, true, "the pager is not a failure");
+  assert.equal(result.lines[0].pager_presses, 2, "one press per extra page");
+  assert.match(result.output, /vlan 30/, "the last page was read");
+  assert.deepEqual(
+    sw.consoleLine.chars.map((entry) => entry.code),
+    [32, 32],
+    "space advances the pager",
+  );
+  assert.equal(result.prompt, "S1#");
+});
+
+test("a plain command presses no keys", () => {
+  const iso = loadBridge();
+  const sw = device(iso, { name: "S1", type: 1, prompt: "S1#" });
+
+  const result = plain(iso.ctx.dispatch("exec", { device: "S1", command: "show version" }));
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(sw.consoleLine.chars, [], "nothing was typed for the device");
+});
+
+test("a pager that never advances is reported as pager, not as success", () => {
+  const iso = loadBridge();
+  /* The marker IOS erases with backspaces and spaces; nothing follows it. */
+  device(iso, {
+    name: "S1",
+    type: 1,
+    prompt: "S1#",
+    pager: ["vlan 10\n--More--\b\b\b\b\b\b\b\b        \b\b\b\b\b\b\b\b"],
+  });
+
+  const result = plain(
+    iso.ctx.dispatch("exec", { device: "S1", command: "show vlan", timeout_ms: 400 }),
+  );
+
+  assert.equal(result.ok, false, "a truncated table must not look complete");
+  assert.equal(result.stopped_on.reason, "pager");
+  assert.match(result.error, /pager marker/);
+});
+
+test("a console that goes silent without a prompt is broken with Ctrl+Shift+6", () => {
+  const iso = loadBridge();
+  const sw = device(iso, {
+    name: "S1",
+    type: 1,
+    prompt: "S1#",
+    /* freezeAfter: 0 swallows the very first command: no echo, no prompt, the
+     * shape of a console stuck mid-command. */
+    freezeAfter: 0,
+  });
+
+  const result = plain(
+    iso.ctx.dispatch("exec", { device: "S1", command: "show running-config", timeout_ms: 2200 }),
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(result.lines[0].console_break, true, "the break was sent");
+  assert.match(result.lines[0].notes.join(" "), /Ctrl\+Shift\+6/);
+  assert.deepEqual(
+    sw.consoleLine.chars.map((entry) => entry.code),
+    [30],
+    "char 30 is Ctrl+Shift+6 in PT",
+  );
+  assert.equal(result.stopped_on.reason, "timeout", "the console never came back");
+});

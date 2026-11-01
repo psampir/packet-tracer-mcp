@@ -173,7 +173,38 @@ plan is exactly what will be typed.
 This is the cheapest way to catch a mode bug (PTM-02) before it destroys a
 session: preview, then send.
 
-## 6. What a PC sees
+## 6. Paging and a wedged console
+
+Two things stop a command from finishing on its own, and both belong to the
+bridge, because the server cannot see the console:
+
+**The pager.** A long `show` prints a page, then `--More--` instead of the
+prompt. The output simply stops changing, which looks exactly like a finished
+command, and the next line would be typed *into the pager*. The bridge therefore
+answers the marker itself: it presses space (char 32) and keeps reading, up to
+200 pages. IOS erases the marker with backspaces, so the check looks at the tail
+of the output, not the whole buffer. If the pager does not advance twice in a
+row, the line fails with `"reason": "pager"` and the message `stopped at a pager
+marker (--More--)`: a truncated table never looks complete.
+
+**A console that goes quiet mid-command.** The command was echoed, output
+stopped, and no prompt came back: an unanswered `[yes/no]`, a half-typed line, a
+console that a mistyped command parked. PT sends the break as char 30
+(Ctrl+Shift+6), and the bridge sends it once after `HANG_IDLE_MS` of silence,
+then keeps waiting for the rest of the per-line budget. The record carries
+`"console_break": true` and a `notes` entry, so a later timeout says what was
+tried instead of looking like a plain hang.
+
+Both keys are only pressed when the line object exposes `enterChar`; builds
+without it fall back to a plain space for the pager and simply time out for the
+break. The signals travel back in the result:
+
+```json
+{"ok": true,
+ "lines": [{"line": "show vlan", "output": "...", "pager_presses": 2}]}
+```
+
+## 7. What a PC sees
 
 For a `hasIos: false` device, all of the above collapses to `raw`:
 

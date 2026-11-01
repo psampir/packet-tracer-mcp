@@ -193,38 +193,73 @@ function createDevice(devices, options) {
   const bootPrompt = typeof opts.bootPrompt === "string" ? opts.bootPrompt : "";
   const bootUntil = opts.bootMs ? Date.now() + Number(opts.bootMs) : 0;
   const startMode = ios ? promptModeOf(givenPrompt === null ? "Name#" : givenPrompt) : "shell";
+  /* pager: array of pages. The first command prints the first page and stops at
+   * its own "--More--"; each space (char 32) prints the next page, the way IOS
+   * pages long `show` output. */
+  const pagerPages = Array.isArray(opts.pager) ? opts.pager.slice() : null;
+  let pagerStarted = false;
+
+  /* One simulated command on the console: echo, then whatever the device does.
+   * Both enterCommand paths use it, because PT produces the same output whether
+   * the command arrives on the ConsoleLine or through CiscoDevice.enterCommand.
+   * freezeAfter: N commands behave; later ones are swallowed by the mock (no
+   * echo, no prompt change) to exercise the per-line timeout. */
+  let simulated = 0;
+  function simulate(text) {
+    simulated += 1;
+    if (typeof opts.freezeAfter === "number" && simulated > opts.freezeAfter) {
+      return;
+    }
+    consoleLine.output += text + "\n";
+    if (pagerPages && !pagerStarted) {
+      pagerStarted = true;
+      consoleLine.output += pagerPages.shift();
+      return;
+    }
+    if (Date.now() < bootUntil) {
+      consoleLine.output += "--- System Configuration Dialog ---\n";
+      return;
+    }
+    if (isRejected(text, simulated)) {
+      consoleLine.output += "% Invalid input detected at '^' marker.\n";
+      consoleLine.output += currentPrompt();
+      return;
+    }
+    if (!ios) {
+      if (/^ping\b/.test(text)) {
+        consoleLine.output += "Reply from 10.0.0.1: bytes=32 time=1ms TTL=128\n";
+      }
+      consoleLine.output += currentPrompt();
+      return;
+    }
+    applyIosCommand(text);
+    /* Real PT echoes the prompt at the end of the output; the bridge uses that,
+     * not getPrompt(), to tell "the command finished" from "the console went
+     * quiet mid-command". */
+    consoleLine.output += currentPrompt();
+  }
 
   const consoleLine = {
     commands: [],
     output: "",
     flushArgs: [],
+    chars: [],
     enterCommand(cmd) {
       if (opts.throwOnEnter) {
         throw new Error("console line is busy");
       }
       const text = String(cmd);
       consoleLine.commands.push(text);
-      /* freezeAfter: N commands behave; later ones are swallowed by the mock
-       * (no echo, no prompt change) to exercise the per-line timeout. */
-      if (typeof opts.freezeAfter === "number" && consoleLine.commands.length > opts.freezeAfter) {
-        return;
+      simulate(text);
+    },
+    /* PT sends a bare keypress here: char 32 advances the pager, char 30 is
+     * Ctrl+Shift+6 (the console break). The mock records both and lets a page
+     * through on space while the pager has pages left. */
+    enterChar(code, shift) {
+      consoleLine.chars.push({ code: Number(code), shift: Boolean(shift) });
+      if (pagerPages && pagerPages.length && Number(code) === 32) {
+        consoleLine.output += pagerPages.shift();
       }
-      consoleLine.output += text + "\n";
-      if (Date.now() < bootUntil) {
-        consoleLine.output += "--- System Configuration Dialog ---\n";
-        return;
-      }
-      if (isRejected(text, consoleLine.commands.length)) {
-        consoleLine.output += "% Invalid input detected at '^' marker.\n";
-        return;
-      }
-      if (!ios) {
-        if (/^ping\b/.test(text)) {
-          consoleLine.output += "Reply from 10.0.0.1: bytes=32 time=1ms TTL=128\n";
-        }
-        return;
-      }
-      applyIosCommand(text);
     },
     getOutput() {
       return consoleLine.output;
@@ -294,6 +329,7 @@ function createDevice(devices, options) {
     },
     enterCommand(cmd, mode) {
       device.deviceCommands.push({ cmd: String(cmd), mode: String(mode) });
+      simulate(String(cmd));
       return { first: 0, second: "" };
     },
     setName(newName) {

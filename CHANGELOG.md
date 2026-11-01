@@ -4,6 +4,35 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-01
+
+### Added
+
+- **The bridge answers the IOS pager.** Long `show` output stops at `--More--`
+  and the console goes quiet, which used to look like a finished command: the
+  next line was typed *into the pager*. The bridge now presses space (char 32)
+  and keeps reading, up to 200 pages, and reports `pager_presses`. A pager that
+  will not advance twice in a row fails with `"reason": "pager"` and
+  `stopped at a pager marker (--More--)` instead of returning a truncated table.
+  The marker is detected at the tail of the output, so IOS erasing it with
+  backspaces does not defeat the check.
+- **A wedged console is broken, not just timed out.** When a command was sent,
+  output stopped and no prompt came back, the bridge sends one Ctrl+Shift+6
+  (char 30) after `HANG_IDLE_MS` (1.5 s) and records `"console_break": true`
+  with a `notes` entry. "Finished" and "wedged" are now told apart by whether
+  the output ends at the prompt, which is what PT echoes.
+- **CI runs on Windows and macOS** as well as Linux: the mailbox is resolved from
+  the user's home directory, and that is the one thing a platform can change.
+
+### Changed
+
+- `bridge/bridge.js` changed, so the Script Module has to be refreshed: import
+  `packet-tracer-mcp.pts` from this release, or paste the current `bridge.js`.
+  A module from 0.3.x keeps working but never reports `pager_presses` or
+  `console_break`.
+- The bridge test harness now echoes the prompt after each command, the way
+  Packet Tracer does, and models pager pages and `enterChar`.
+
 ## [0.3.3] - 2026-10-29
 
 ### Added

@@ -386,6 +386,21 @@ var SEND_POLL_MS = 15;
 var SEND_STABLE_MS = 120;
 var SEND_TIMEOUT_MS = 3000;
 
+/* Long `show` output stops at a pager and waits for a key, and the pager is
+ * invisible to the server: the console simply goes quiet. If the bridge does not
+ * answer it, the next command is typed into the pager and comes back as garbage,
+ * so the pager is handled here, inside the read loop. */
+var PAGER_RE = /(--\s*More\s*--|\(more\))[\s\b]*$/i;
+var PAGER_KEY = 32;            /* space: next page                          */
+var PAGER_MAX_PRESSES = 200;   /* a page is ~24 lines; beyond this, broken   */
+var PAGER_STUCK_LIMIT = 2;     /* presses with no new output before giving up */
+
+/* A wedged console (a prompt that never comes back) is broken with
+ * Ctrl+Shift+6, which Packet Tracer sends as char code 30. */
+var HANG_BREAK_KEY = 30;
+var HANG_IDLE_MS = 1500;
+var HANG_MAX_BREAKS = 1;
+
 function nowMs() {
     /* ES5 has Date.now(); the fallback keeps older QtScript builds happy. */
     if (typeof Date.now === "function") { return Date.now(); }
@@ -475,6 +490,42 @@ function readOutput(line) {
         if (typeof line.getOutput === "function") { output = line.getOutput(); }
     } catch (e) { output = ""; }
     return String(output === null || typeof output === "undefined" ? "" : output);
+}
+
+/* True when the output ends at a pager marker. IOS erases the marker with
+ * backspaces and spaces after the keypress, hence the trailing [\s\b]*. */
+function trailingPager(text) {
+    return PAGER_RE.test(String(text === null || typeof text === "undefined" ? "" : text).slice(-400));
+}
+
+/* IOS echoes the prompt after the command, so output that ends at the prompt
+ * means "the command finished". Output that goes quiet WITHOUT the prompt means
+ * the console is wedged (a half-typed line, a question nobody answers). */
+function endsWithPrompt(text, prompt) {
+    var p = String(prompt === null || typeof prompt === "undefined" ? "" : prompt)
+        .replace(/\s+$/, "");
+    if (!p) { return false; }
+    var d = String(text === null || typeof text === "undefined" ? "" : text)
+        .replace(/\s+$/, "");
+    return d.length >= p.length && d.substring(d.length - p.length) === p;
+}
+
+/* Press one key on the console. PT exposes enterChar on the console line; the
+ * text fallback keeps the pager working on builds that only have enterCommand
+ * (a space and Enter also advance the pager). Returns how it was sent, or null. */
+function pressKey(line, code, text) {
+    var how = null;
+    if (typeof line.enterChar === "function") {
+        try { line.enterChar(code, 0); how = "enterChar"; } catch (e) { how = null; }
+        if (how === null) {
+            try { line.enterChar(code, false); how = "enterChar"; } catch (e2) { how = null; }
+        }
+    }
+    if (how === null && typeof text === "string" &&
+            typeof line.enterCommand === "function") {
+        try { line.enterCommand(text); how = "enterCommand"; } catch (e3) { how = null; }
+    }
+    return how;
 }
 
 function readDeviceState(device, line) {
@@ -637,6 +688,12 @@ function sendOneLine(device, line, cmd, timeoutMs) {
     var lastChange = started;
     var timedOut = false;
     var promptAfter = promptBefore;
+    var pagerPresses = 0;
+    var pagerStuck = 0;
+    var lastPagerLen = -1;
+    var breaks = 0;
+    var notes = [];
+    var unsettled = false;
 
     try {
         line.enterCommand(cmd);
@@ -658,13 +715,55 @@ function sendOneLine(device, line, cmd, timeoutMs) {
 
         var out = readOutput(line);
         var now = nowMs();
+        var delta = out.substring(lenBefore);
         if (out.length !== lastLen) {
             lastLen = out.length;
             lastChange = now;
         }
         promptAfter = readPrompt(line);
         if (promptAfter !== promptBefore) { break; }
-        if (now - lastChange >= SEND_STABLE_MS) { break; }
+
+        /* Answer the pager before treating silence as "the command finished". */
+        if (trailingPager(out) && pagerPresses < PAGER_MAX_PRESSES) {
+            if (out.length === lastPagerLen) {
+                pagerStuck = pagerStuck + 1;
+            } else {
+                pagerStuck = 0;
+            }
+            if (pagerStuck < PAGER_STUCK_LIMIT &&
+                    pressKey(line, PAGER_KEY, " ") !== null) {
+                lastPagerLen = out.length;
+                pagerPresses = pagerPresses + 1;
+                lastChange = nowMs();
+                sleepMs(SEND_POLL_MS);
+                continue;
+            }
+        }
+
+        if (now - lastChange >= SEND_STABLE_MS) {
+            /* Quiet output: finished only if it ends at the prompt. A console
+             * that has no getOutput() gives no signal, so it keeps the old
+             * "stable means done" behaviour instead of paying HANG_IDLE_MS. */
+            var settled = typeof line.getOutput !== "function" ||
+                !promptAfter || endsWithPrompt(delta, promptAfter);
+            if (settled) { break; }
+            if (breaks < HANG_MAX_BREAKS && now - started >= HANG_IDLE_MS) {
+                if (pressKey(line, HANG_BREAK_KEY, null) !== null) {
+                    breaks = breaks + 1;
+                    notes.push("console was silent without a prompt for " +
+                        Math.round(now - lastChange) + "ms; sent Ctrl+Shift+6");
+                    lastChange = nowMs();
+                    continue;
+                }
+            }
+            if (breaks < HANG_MAX_BREAKS && now - started < timeoutMs) {
+                /* A break is still possible inside this budget: wait for it. */
+                sleepMs(SEND_POLL_MS);
+                continue;
+            }
+            unsettled = true;
+            break;
+        }
         if (now - started >= timeoutMs) {
             timedOut = true;
             break;
@@ -672,13 +771,23 @@ function sendOneLine(device, line, cmd, timeoutMs) {
         sleepMs(SEND_POLL_MS);
     }
 
-    var delta = readOutput(line).substring(lenBefore);
-    return {
+    var finalOutput = readOutput(line);
+    var deltaFinal = finalOutput.substring(lenBefore);
+    var truncated = trailingPager(finalOutput);
+    var result = {
         prompt: promptAfter,
-        delta: delta,
-        timedOut: timedOut,
-        ok: !timedOut && !CLI_ERROR_RE.test(delta)
+        delta: deltaFinal,
+        timedOut: timedOut || unsettled,
+        ok: !(timedOut || unsettled) && !truncated && !CLI_ERROR_RE.test(deltaFinal)
     };
+    if (pagerPresses) { result.pager_presses = pagerPresses; }
+    if (truncated) {
+        result.pager_truncated = true;
+        notes.push("output stopped at a pager marker");
+    }
+    if (breaks) { result.console_break = true; }
+    if (notes.length) { result.notes = notes; }
+    return result;
 }
 
 /* Run a resolved plan line by line and build the configure/exec result. */
@@ -700,19 +809,26 @@ function runLines(device, plan, options, line) {
     for (i = 0; i < plan.lines.length; i++) {
         cmd = String(plan.lines[i]);
         sent = sendOneLine(device, console, cmd, timeoutMs);
-        records.push({
+        var record = {
             line: cmd,
             prompt: sent.prompt,
             output: sent.delta,
             ok: sent.ok
-        });
+        };
+        if (sent.pager_presses) { record.pager_presses = sent.pager_presses; }
+        if (sent.console_break) { record.console_break = true; }
+        if (sent.notes) { record.notes = sent.notes; }
+        records.push(record);
         if (sent.delta) { chunks.push(sent.delta); }
         if (!sent.ok) {
             failure = {
                 index: i + 1,
                 line: cmd,
                 prompt: sent.prompt,
-                reason: sent.timedOut ? "timeout" : "rejected",
+                /* A pager marker is the actionable cause even when the wait
+                 * also ran out, so it is reported before the timeout. */
+                reason: sent.pager_truncated ? "pager"
+                    : (sent.timedOut ? "timeout" : "rejected"),
                 output: sent.delta
             };
             if (stoppedOn === null) { stoppedOn = failure; }
@@ -732,7 +848,10 @@ function runLines(device, plan, options, line) {
     };
     if (stoppedOn !== null) {
         result.error = "line " + stoppedOn.index + " '" + stoppedOn.line + "' " +
-            (stoppedOn.reason === "timeout" ? "timed out" : "was rejected") +
+            (stoppedOn.reason === "timeout" ? "timed out"
+                : (stoppedOn.reason === "pager"
+                    ? "stopped at a pager marker (--More--)"
+                    : "was rejected")) +
             " at prompt '" + stoppedOn.prompt + "'";
         result.failed = failed;
     }

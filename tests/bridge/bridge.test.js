@@ -283,10 +283,20 @@ test("configure prefers ConsoleLine and returns per-line results and the final p
   );
   assert.deepEqual(
     result.lines.map((entry) => entry.output),
-    sent.map((line) => line + "\n"),
-    "each line reports its own delta",
+    [
+      "configure terminal\nR1(config)#",
+      "hostname R1\nR1(config)#",
+      "interface GigabitEthernet0/0\nR1(config-if)#",
+      "no shutdown\nR1(config-if)#",
+      "end\nR1#",
+    ],
+    "each line reports its own delta, including the prompt PT echoes",
   );
-  assert.equal(result.output, sent.map((l) => l + "\n").join(""), "deltas joined");
+  assert.equal(
+    result.output,
+    result.lines.map((entry) => entry.output).join(""),
+    "deltas joined",
+  );
   assert.equal(device.consoleLine.flushArgs[0], 10, "flush(10) while waiting per line");
 });
 
@@ -330,7 +340,11 @@ test("configure falls back to device.enterCommand when the line throws", () => {
     { cmd: "enable", mode: "" },
     { cmd: "end", mode: "" },
   ]);
-  assert.equal(result.output, "", "output stays empty");
+  assert.equal(
+    result.output,
+    "enable\nR1#end\nR1#",
+    "the fallback still reaches the console and echoes the prompt",
+  );
   assert.equal(result.prompt, "R1#", "prompt is still read");
   assert.equal(result.ok, true);
 });

@@ -152,10 +152,20 @@ Fix, in this order:
 
 A console can stop accepting input without Packet Tracer crashing: the prompt
 never comes back after a command, two calls arrive out of order, or a mistyped
-command starts a DNS lookup that blocks the line. The bridge has no wall-clock
-timer, so it cannot break such a state on its own, the way out is one of the
-actions below, **in this order**. Each step is cheaper and less destructive than
-the next one.
+command starts a DNS lookup that blocks the line.
+
+The bridge handles the two cases it can see on its own, without help:
+
+* **A pager.** When the output ends at `--More--`, the bridge presses space and
+  keeps reading (up to 200 pages) instead of treating the silence as a finished
+  command. The record reports `pager_presses`; a pager that will not advance
+  fails with `reason: "pager"` rather than returning a truncated table.
+* **Silence with no prompt.** After `HANG_IDLE_MS` (1.5 s) of a command that was
+  sent and never came back, the bridge sends one Ctrl+Shift+6 (char 30) and
+  reports `console_break` with a note, so the failure says what was tried.
+
+What is left needs a human, **in this order**. Each step is cheaper and less
+destructive than the next one.
 
 1. **Wait for the prompt.** Most "hangs" are a slow device. Give it the full
    `ready_timeout` (default 45 s) and retry the call once; a 2911 in its
@@ -182,7 +192,9 @@ the next one.
    [§5](#5-forcing-a-rescan-watcher-not-firing) first: **Run File** is usually
    enough.
 5. **Re-paste `bridge.js`** only if the module answers but behaves like an older
-   version, see [§7](#7-updating-the-bridge-later).
+   version: a `console_break` field that never appears, or a `--More--` that
+   times out, means the module predates 0.4.0 and should be updated, see
+   [§7](#7-updating-the-bridge-later).
 
 > **A power-cycle discards everything that is not saved in the `.pkt`.** The
 > running config of that device (interfaces, VLANs, routing, DHCP pools, DNS
