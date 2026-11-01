@@ -202,7 +202,11 @@ def test_pt_power_off(jload) -> None:
 def test_pt_save_default_path(jload) -> None:
     saved = jload(server.save())
     assert saved["saved"] is True
-    assert "/saved/" in saved["path"]
+    # Compare parts, not a hardcoded "/": the default lives under <base>/saved
+    # and the separator is platform-specific (Windows fails on "/saved/").
+    path = Path(saved["path"])
+    assert path.parent.name == "saved"
+    assert path.suffix == ".pkt"
 
 
 def test_pt_save_creates_saved_dir(jload, home: Path) -> None:
