@@ -1,6 +1,6 @@
 """The file-drop transport between this server and ``bridge/bridge.js``.
 
-One call is one JSON file in, one JSON file out — no sockets, no shared memory:
+One call is one JSON file in, one JSON file out; no sockets, no shared memory:
 
 1. the request ``{"id", "op", "args"}`` is written to ``<base>/jobs/<id>.json``
    **atomically** (write ``<id>.json.tmp``, then :func:`os.replace`), so the
@@ -38,7 +38,7 @@ _NOT_RESPONDING = (
     "     + Get/Change Network Info."
 )
 
-#: Shown when the base directory is absent — the module never ran.
+#: Shown when the base directory is absent: the module never ran.
 _NOT_SET_UP = (
     "The packet-tracer-mcp bridge was never set up: base dir {base} does not exist.\n"
     "Start the bridge once (a Script Module start or 'Run File' in PT creates\n"
@@ -104,7 +104,7 @@ def call_pt(op: str, args: dict | None = None, timeout: float | None = None) -> 
                 raw = response_path.read_text(encoding="utf-8")
                 data = json.loads(raw)
             except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-                # The bridge may still be writing — retry shortly.
+                # The bridge may still be writing; retry shortly.
                 if time.monotonic() >= deadline:
                     break
                 time.sleep(config.POLL_INTERVAL)
@@ -130,7 +130,7 @@ def call_pt(op: str, args: dict | None = None, timeout: float | None = None) -> 
             break
         time.sleep(config.POLL_INTERVAL)
 
-    # Timed out — drop our job so it is not processed later behind our back.
+    # Timed out: drop our job so it is not processed later behind our back.
     with contextlib.suppress(OSError):
         job_path.unlink()
     raise PTBridgeError(f"Timed out after {timeout:.0f}s waiting for op '{op}'.\n{_NOT_RESPONDING}")

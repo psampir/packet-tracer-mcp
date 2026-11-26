@@ -4,9 +4,6 @@ An [MCP](https://modelcontextprotocol.io) server that lets an AI agent **build a
 Cisco Packet Tracer topology**: add devices, cable them, push IOS CLI, read `show` output, all through
 Packet Tracer's own Script Module API, with no network port and no PT plugin to compile.
 
-[![CI](https://github.com/psampir/packet-tracer-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/psampir/packet-tracer-mcp/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-
 > **Unofficial.** Not affiliated with or endorsed by Cisco. It drives *your own* Packet Tracer
 > install through the documented Scripting/Extensions API and ships no Cisco code:
 > see [THIRD_PARTY.md](THIRD_PARTY.md).

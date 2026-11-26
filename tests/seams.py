@@ -23,7 +23,7 @@ from pt_mcp import hosts, protocol, readiness
 from pt_mcp.tools import build as tools_build
 from pt_mcp.tools import cli as tools_cli
 
-#: Modules that hold their own ``call_pt`` reference — the ones the old
+#: Modules that hold their own ``call_pt`` reference: the ones the old
 #: ``pt_mcp.server`` namespace used to cover with a single patch.
 BRIDGE_MODULES: tuple[ModuleType, ...] = (
     pt_eval,

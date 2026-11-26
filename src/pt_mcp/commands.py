@@ -1,9 +1,9 @@
-"""CLI input cleanup for the ``pt_configure`` tool — split and strip only.
+"""CLI input cleanup for the ``pt_configure`` tool: split and strip only.
 
 This module used to carry the *mode* policy (prepending ``enable`` and
 ``configure terminal``, appending ``end``). That decision moved into
 ``bridge/bridge.js`` (PTM-02), because only the bridge can see the prompt after
-every line — and because a PC's ``Command Prompt`` must not receive a single
+every line, and because a PC's ``Command Prompt`` must not receive a single
 injected line, which the server could not know.
 
 What remains here is transport-agnostic tidying:

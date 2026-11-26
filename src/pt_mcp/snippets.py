@@ -3,7 +3,7 @@
 Generated ES5 runs inside the PT Script Engine and has no access to Python: every
 template is a :class:`string.Template` whose placeholders are already-encoded
 values (:func:`pt_mcp.eval._lit`) or code fragments. They are filled in
-``pt_mcp.hosts`` and ``pt_mcp.topology``; keep the ``$marker`` line first — it is
+``pt_mcp.hosts`` and ``pt_mcp.topology``; keep the ``$marker`` line first: it is
 what identifies a snippet in ``raw`` and in the logs.
 """
 

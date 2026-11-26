@@ -29,7 +29,7 @@ def set_ip(
     dns: str | None = None,
     dhcp: bool = False,
 ) -> str:
-    """Set a host port's IPv4 address — static, or DHCP by asking the server.
+    """Set a host port's IPv4 address: static, or DHCP by asking the server.
 
     Args:
         device: device name.
@@ -40,7 +40,7 @@ def set_ip(
         dns: DNS server address, when given.
         dhcp: request a lease instead. The static fields are ignored; PT's DHCP
             client runs asynchronously, so the returned address may still be
-            0.0.0.0 — read it again with get_config after a moment.
+            0.0.0.0; read it again with get_config after a moment.
 
     Returns ``{"port", "ip", "mask", "dhcp"}`` read back from the device.
     """
@@ -194,7 +194,7 @@ def ping(src: str, dst: str, count: int = 4, wait: float = 10) -> str:
     Args:
         src: source host device name (PC/server shell).
         dst: target address or host name.
-        count: advisory only — PT's PC ping always sends exactly four echoes;
+        count: advisory only; PT's PC ping always sends exactly four echoes;
             the value is reported back, not applied.
         wait: seconds to wait for the replies (default 10).
 

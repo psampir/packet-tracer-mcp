@@ -1,7 +1,7 @@
 """Waiting for a usable device prompt (PTM-01).
 
 The bridge reads the prompt before and after every line; this module adds the one
-thing it cannot do — *real waiting*: :func:`wait_ready` polls ``get_state`` with
+thing it cannot do, *real waiting*: :func:`wait_ready` polls ``get_state`` with
 :func:`time.sleep` until a freshly added or freshly powered device has a usable
 prompt, answering the IOS initial-configuration dialog on the way. See
 ``docs/cli-semantics.md``.

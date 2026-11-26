@@ -3,7 +3,7 @@
 The normalizer is deliberately dumb: it splits input into lines, drops blanks and
 ``!`` comments and strips whitespace. Every mode decision (``enable``,
 ``configure terminal``, ``end``) belongs to ``bridge/bridge.js``, because only the
-bridge sees the prompt — see ``docs/cli-semantics.md`` and ``tests/test_ready.py``.
+bridge sees the prompt; see ``docs/cli-semantics.md`` and ``tests/test_ready.py``.
 """
 
 from __future__ import annotations

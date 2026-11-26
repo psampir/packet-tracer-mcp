@@ -2,21 +2,21 @@
 
 ## This project
 
-`packet-tracer-mcp` is released under the **MIT License** — see [LICENSE](LICENSE)
+`packet-tracer-mcp` is released under the **MIT License**; see [LICENSE](LICENSE)
 (`Copyright (c) 2026 Pawel Sampir`). The notices below cover third-party material consulted or
 referenced by this project.
 
-## Cisco Packet Tracer — API documentation
+## Cisco Packet Tracer: API documentation
 
-The IPC/Extensions API used by `bridge/bridge.js` — the `ipc` object with `ipc.network()`,
+The IPC/Extensions API used by `bridge/bridge.js`, the `ipc` object with `ipc.network()`,
 `ipc.appWindow()`, `ipc.systemFileManager()` and the `DeviceType` / `CONNECT_TYPES` /
-`PortType` enums — is **documented by Cisco** in the Packet Tracer documentation set
+`PortType` enums, is **documented by Cisco** in the Packet Tracer documentation set
 (*Packet Tracer Scripting / Extensions API* sections) and in the *PT Script Modules* help that
 ships with the application.
 
 **No Cisco code is included in this repository.** Everything here is written from scratch against
 the documented API surface: the JSON request/response shapes, the JavaScript module and all Python
-code are original to this project. `bridge/bridge.js` is not a Cisco artifact — it is a script the
+code are original to this project. `bridge/bridge.js` is not a Cisco artifact; it is a script the
 user pastes into *their own* Packet Tracer installation, where it runs inside their licensed copy.
 
 "Packet Tracer" and "Cisco" are trademarks of Cisco Systems, Inc. This project is unofficial and is
