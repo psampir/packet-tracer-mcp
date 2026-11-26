@@ -1,7 +1,7 @@
 """Paths and tunables for the Packet Tracer bridge.
 
 Everything the transport needs is derived from one directory, the *mailbox*
-(``PT_MCP_HOME``), so a second Packet Tracer install — or a test run — only has
+(``PT_MCP_HOME``), so a second Packet Tracer install, or a test run, only has
 to point the environment variable somewhere else:
 
 ===============  ==========================================================
@@ -13,7 +13,7 @@ to point the environment variable somewhere else:
 ``bridge.js`` computes the mailbox itself, as ``getUserFolder() + "/pt-mcp"``
 inside Packet Tracer. This side has to find the same directory without asking
 PT, so :func:`inspect` walks :data:`HOME_PATTERNS` in order and takes the first
-candidate that already holds both ``jobs/`` and ``results/`` — the ones the
+candidate that already holds both ``jobs/`` and ``results/``: the ones the
 bridge creates when it starts. ``PT_MCP_HOME`` always wins and skips the search;
 when nothing matches yet, the first candidate stands in so the error messages
 name the expected location.

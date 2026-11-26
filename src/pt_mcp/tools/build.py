@@ -37,7 +37,7 @@ def add_device(
         skip_boot: press *Skip boot* right after adding, so the device is usable
             without waiting out the IOS boot.
 
-    Returns ``{"name": ..., "ready": true|false}`` — ``ready`` is false while the
+    Returns ``{"name": ..., "ready": true|false}``: ``ready`` is false while the
     device still boots, which is when the next call should use ``ready_timeout``.
     """
     try:
@@ -131,7 +131,7 @@ def power(
         ready_timeout: seconds to wait for that prompt when ``ready`` is true.
 
     A power cycle is the escape hatch for a wedged console, but it discards
-    everything that was not saved into the .pkt — see the Recovery section of
+    everything that was not saved into the .pkt; see the Recovery section of
     docs/setup.md before using it.
     """
     result = run_op("power", {"device": device, "on": bool(on)})

@@ -1,6 +1,6 @@
 """Shared pytest fixtures: an isolated ``PT_MCP_HOME`` and a running fake bridge.
 
-The whole suite is offline — no Packet Tracer, no network. ``tests/fake_bridge.py``
+The whole suite is offline: no Packet Tracer, no network. ``tests/fake_bridge.py``
 plays the part of ``bridge/bridge.js``: it polls ``<home>/jobs`` and writes one
 canned response per job into ``<home>/results``, with the same file semantics.
 
@@ -101,7 +101,7 @@ def home() -> Path:
 
 @pytest.fixture
 def dead_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A home directory nobody answers in — for timeout and setup errors."""
+    """A home directory nobody answers in: for timeout and setup errors."""
     home = tmp_path / "silent-home"
     home.mkdir()
     monkeypatch.setattr(config, "BASE", home)

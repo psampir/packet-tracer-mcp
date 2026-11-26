@@ -1,7 +1,7 @@
 """Tests for the file-drop transport (:mod:`pt_mcp.protocol`) via the MCP tools.
 
 Everything here goes through ``tests/fake_bridge.py``, which answers on disk the
-way ``bridge/bridge.js`` does — so these tests prove the Python side of the
+way ``bridge/bridge.js`` does, so these tests prove the Python side of the
 protocol, the tool wiring and the error/timeout behaviour without Packet Tracer.
 """
 

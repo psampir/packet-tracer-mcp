@@ -1,7 +1,7 @@
 "use strict";
 
 /*
- * Test harness for bridge/bridge.js — the ES5 script that runs inside Packet
+ * Test harness for bridge/bridge.js: the ES5 script that runs inside Packet
  * Tracer's Script Module engine.
  *
  * bridge.js is a plain script, not a module: it declares globals and expects the
@@ -13,7 +13,7 @@
  *   - an in-memory filesystem (`mem`) with the subset of SystemFileManager
  *     bridge.js actually calls
  *   - mock devices with a ConsoleLine (has getOutput) and a TerminalLine (does
- *     not — that difference is the point of getCommandLine()), plus a prompt
+ *     not, that difference is the point of getCommandLine()), plus a prompt
  *     state machine (`>` → `#` → `(config)#` → `(config-if)#`, `end`, `exit`) so
  *     the CLI rules in bridge.js have something IOS-shaped to act on
  *

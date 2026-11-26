@@ -82,7 +82,7 @@ def _set_ip(
     else:
         lines = ["    port.setDhcpClientFlag(false);"]
         if ip is not None and mask is not None:
-            # HostPort.setIpSubnetMask takes (ip, mask) in that order — verified.
+            # HostPort.setIpSubnetMask takes (ip, mask) in that order, verified.
             lines.append(f"    port.setIpSubnetMask({_lit(ip)}, {_lit(mask)});")
         if gateway:
             lines.append(f"    port.setDefaultGateway({_lit(gateway)});")
@@ -336,7 +336,7 @@ def _count_echoes(text: str) -> tuple[int, int, int]:
     """Count replies, timeouts and unreachable answers, one line at a time.
 
     ``Reply from <src>: Destination host unreachable.`` is *not* a reply, so each
-    line is classified once — unreachable first, then a real reply, then a
+    line is classified once: unreachable first, then a real reply, then a
     timeout.
     """
     replies = 0

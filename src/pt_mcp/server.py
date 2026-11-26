@@ -2,14 +2,14 @@
 
 Twenty-two tools, in five groups:
 
-* **observe** — :func:`status`, :func:`list_devices`, :func:`show`
-* **build** — :func:`add_device`, :func:`remove_device`, :func:`link`,
+* **observe**: :func:`status`, :func:`list_devices`, :func:`show`
+* **build**: :func:`add_device`, :func:`remove_device`, :func:`link`,
   :func:`autolink`, :func:`power`, :func:`skip_boot`
-* **topology** — :func:`list_links`, :func:`list_ports`
-* **hosts** — :func:`get_config`, :func:`set_ip`, :func:`set_ipv6`,
+* **topology**: :func:`list_links`, :func:`list_ports`
+* **hosts**: :func:`get_config`, :func:`set_ip`, :func:`set_ipv6`,
   :func:`dns_record`, :func:`dns_list`, :func:`http_page`,
   :func:`pc_command`, :func:`ping`
-* **change / escape** — :func:`configure`, :func:`save`, :func:`raw`
+* **change / escape**: :func:`configure`, :func:`save`, :func:`raw`
 
 They all funnel into :func:`pt_mcp.protocol.call_pt`, i.e. one JSON file in
 ``<PT_MCP_HOME>/jobs`` and one out of ``<PT_MCP_HOME>/results``; the ops are
@@ -18,24 +18,24 @@ acts on the **active** ``.pkt`` file.
 
 This module is the entry point only. The work lives in:
 
-* :mod:`pt_mcp.registry` — the one :data:`server` instance and its instructions;
-* :mod:`pt_mcp.readiness` — :func:`wait_ready`, the real waiting the bridge
+* :mod:`pt_mcp.registry`: the one :data:`server` instance and its instructions;
+* :mod:`pt_mcp.readiness`: :func:`wait_ready`, the real waiting the bridge
   cannot do (PTM-01);
-* :mod:`pt_mcp.tables` — device-type and cable names, validated before the call;
-* :mod:`pt_mcp.eval` — the ``eval`` op, its snippet helpers and the ``_tool``
+* :mod:`pt_mcp.tables`: device-type and cable names, validated before the call;
+* :mod:`pt_mcp.eval`: the ``eval`` op, its snippet helpers and the ``_tool``
   JSON wrapper;
-* :mod:`pt_mcp.snippets` — the ES5 templates the host and topology tools ship;
-* :mod:`pt_mcp.hosts`, :mod:`pt_mcp.topology`, :mod:`pt_mcp.raw` — the tool
+* :mod:`pt_mcp.snippets`: the ES5 templates the host and topology tools ship;
+* :mod:`pt_mcp.hosts`, :mod:`pt_mcp.topology`, :mod:`pt_mcp.raw`: the tool
   bodies, implemented *server-side on top of the existing ``eval`` op*
   (PTM-03/04/12), so the installed Script Module keeps working unchanged;
-* :mod:`pt_mcp.tools` — the twenty-two tools themselves, registered with
+* :mod:`pt_mcp.tools`: the twenty-two tools themselves, registered with
   ``@server.tool()`` when the package is imported. They are re-exported here, so
   ``pt_mcp.server.status(...)`` and the rest stay the public surface.
 
-Every tool returns a **JSON string** — a result, or ``{"ok": false, "error"}``
+Every tool returns a **JSON string**: a result, or ``{"ok": false, "error"}``
 so an LLM client always gets something it can act on instead of a traceback.
 
-Transport: stdio only — ``main()`` starts the server with
+Transport: stdio only; ``main()`` starts the server with
 ``server.run("stdio")`` and prints nothing, so the stream stays clean for the
 JSON-RPC handshake. ``main(["--doctor"])`` prints the mailbox resolution
 (:mod:`pt_mcp.doctor`) instead of starting anything.

@@ -414,7 +414,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     print(
-        f"packet-tracer-mcp live smoke — "
+        f"packet-tracer-mcp live smoke: "
         f"PT {status.get('version')} / {status.get('deviceCount')} devices"
     )
     clean_stale()

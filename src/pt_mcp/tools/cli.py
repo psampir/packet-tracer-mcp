@@ -47,12 +47,12 @@ def configure(
         device: device name.
         commands: newline-separated string, or a list of command strings. Blank
             lines and '!' comments are dropped; nothing else is rewritten here.
-        mode: how to reach the right CLI mode — ``"auto"`` (default: inspect the
+        mode: how to reach the right CLI mode: ``"auto"`` (default: inspect the
             prompt and do the right thing), ``"raw"`` (send exactly these lines),
             ``"exec"`` (exec commands only: enable if needed, never config) or
             ``"config"`` (enable + configure terminal, end unless keep_session).
             Devices without IOS (PC, server, printer, ...) always get raw.
-        keep_session: do not append ``end`` — leave the device in config mode for
+        keep_session: do not append ``end``; leave the device in config mode for
             the next call.
         stop_on_error: stop the block at the first rejected/timed-out line
             (default true).
